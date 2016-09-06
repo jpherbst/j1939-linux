@@ -3101,12 +3101,12 @@ F:	include/uapi/linux/can/raw.h
 F:	include/uapi/linux/can/gw.h
 
 CAN-J1939 NETWORK LAYER
-M:	Kurt Van Dijck <kurt.van.dijck@eia.be>
-L:	socketcan-core@lists.berlios.de
-L:	netdev@vger.kernel.org
+M:	Kurt Van Dijck <dev.kurt@vandijck-laurijssen.be>
+L:	linux-can@vger.kernel.org
 S:	Maintained
+F:	Documentation/networking/j1939.txt
 F:	net/can/j1939/
-F:	include/linux/can/j1939.h
+F:	include/uapi/linux/can/j1939.h
 
 CAPABILITIES
 M:	Serge Hallyn <serge@hallyn.com>
