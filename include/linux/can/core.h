@@ -16,7 +16,6 @@
 #include <linux/can.h>
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
-#include <net/rtnetlink.h>
 
 #define CAN_VERSION "20170425"
 
