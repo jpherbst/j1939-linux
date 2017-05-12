@@ -28,7 +28,10 @@
 
 #include "j1939-priv.h"
 
-#define CANDATA2NAME(data) le64_to_cpup((uint64_t *)data)
+static inline name_t candata_to_name(const struct sk_buff *skb)
+{
+	return le64_to_cpup((__le64 *)skb->data);
+}
 
 static inline int ac_msg_is_request_for_ac(struct sk_buff *skb)
 {
@@ -52,7 +55,7 @@ static int j1939_verify_outgoing_address_claim(struct sk_buff *skb)
 		return -EPROTO;
 	}
 
-	if (skcb->srcname != CANDATA2NAME(skb->data)) {
+	if (skcb->srcname != candata_to_name(skb)) {
 		j1939_notice("tx address claim with different name\n");
 		return -EPROTO;
 	}
@@ -129,7 +132,7 @@ static void j1939_process_address_claim(struct sk_buff *skb)
 		return;
 	}
 
-	name = CANDATA2NAME(skb->data);
+	name = candata_to_name(skb);
 	skcb->srcname = name;
 	if (!name) {
 		j1939_notice("rx address claim without name\n");
