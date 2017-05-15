@@ -187,23 +187,7 @@ struct j1939_ecu *j1939_ecu_find_by_name(name_t name, int ifindex);
 /* find_by_name, with kref & read_lock taken */
 struct j1939_ecu *j1939_ecu_find_priv_default_tx(int ifindex, name_t *pname,
 						 u8 *paddr);
-
 extern struct proc_dir_entry *j1939_procdir;
-
-/* j1939 printk */
-#define j1939_printk(level, ...) printk(level "J1939 " __VA_ARGS__)
-
-#define j1939_err(...)		j1939_printk(KERN_ERR, __VA_ARGS__)
-#define j1939_warning(...)	j1939_printk(KERN_WARNING, __VA_ARGS__)
-#define j1939_notice(...)	j1939_printk(KERN_NOTICE, __VA_ARGS__)
-#define j1939_info(...)		j1939_printk(KERN_INFO, __VA_ARGS__)
-#ifdef DEBUG
-#define j1939_debug(...)	j1939_printk(KERN_DEBUG, __VA_ARGS__)
-#else
-#define j1939_debug(...)
-#endif
-
-struct sk_buff;
 
 /* control buffer of the sk_buff */
 struct j1939_sk_buff_cb {

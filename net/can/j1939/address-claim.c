@@ -23,6 +23,8 @@
  * this is the responsibility of a user space application or daemon.
  */
 
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
 #include <linux/skbuff.h>
 #include <linux/byteorder/generic.h>
 
@@ -51,23 +53,23 @@ static int j1939_verify_outgoing_address_claim(struct sk_buff *skb)
 	struct j1939_sk_buff_cb *skcb = (void *)skb->cb;
 
 	if (skb->len != 8) {
-		j1939_notice("tx address claim with dlc %i\n", skb->len);
+		pr_notice("tx address claim with dlc %i\n", skb->len);
 		return -EPROTO;
 	}
 
 	if (skcb->srcname != candata_to_name(skb)) {
-		j1939_notice("tx address claim with different name\n");
+		pr_notice("tx address claim with different name\n");
 		return -EPROTO;
 	}
 
 	if (skcb->srcaddr == J1939_NO_ADDR) {
-		j1939_notice("tx address claim with broadcast sa\n");
+		pr_notice("tx address claim with broadcast sa\n");
 		return -EPROTO;
 	}
 
 	/* ac must always be a broadcast */
 	if (skcb->dstname || (skcb->dstaddr != J1939_NO_ADDR)) {
-		j1939_notice("tx address claim with dest, not broadcast\n");
+		pr_notice("tx address claim with dest, not broadcast\n");
 		return -EPROTO;
 	}
 	return 0;
@@ -100,7 +102,7 @@ int j1939_fixup_address_claim(struct sk_buff *skb)
 		sa = j1939_name_to_sa(skcb->srcname, skb->dev->ifindex);
 		if (!j1939_address_is_unicast(sa) &&
 		    !ac_msg_is_request_for_ac(skb)) {
-			j1939_notice("tx drop: invalid sa for name 0x%016llx\n",
+			pr_notice("tx drop: invalid sa for name 0x%016llx\n",
 				     skcb->srcname);
 			return -EADDRNOTAVAIL;
 		}
@@ -111,7 +113,7 @@ int j1939_fixup_address_claim(struct sk_buff *skb)
 	if (skcb->dstname) {
 		sa = j1939_name_to_sa(skcb->dstname, skb->dev->ifindex);
 		if (!j1939_address_is_unicast(sa)) {
-			j1939_notice("tx drop: invalid da for name 0x%016llx\n",
+			pr_notice("tx drop: invalid da for name 0x%016llx\n",
 				     skcb->dstname);
 			return -EADDRNOTAVAIL;
 		}
@@ -128,19 +130,19 @@ static void j1939_process_address_claim(struct sk_buff *skb)
 	name_t name;
 
 	if (skb->len != 8) {
-		j1939_notice("rx address claim with wrong dlc %i\n", skb->len);
+		pr_notice("rx address claim with wrong dlc %i\n", skb->len);
 		return;
 	}
 
 	name = candata_to_name(skb);
 	skcb->srcname = name;
 	if (!name) {
-		j1939_notice("rx address claim without name\n");
+		pr_notice("rx address claim without name\n");
 		return;
 	}
 
 	if (!j1939_address_is_valid(skcb->srcaddr)) {
-		j1939_notice("rx address claim with broadcast sa\n");
+		pr_notice("rx address claim with broadcast sa\n");
 		return;
 	}
 

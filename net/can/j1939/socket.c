@@ -10,6 +10,8 @@
  * as published by the Free Software Foundation
  */
 
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
 #include <linux/version.h>
 #include <linux/module.h>
 #include <linux/init.h>
@@ -171,7 +173,7 @@ static void j1939sk_recv_skb(struct sk_buff *oskb, struct j1939_sock *jsk)
 
 	skb = skb_clone(oskb, GFP_ATOMIC);
 	if (!skb) {
-		j1939_warning("skb clone failed\n");
+		pr_warn("skb clone failed\n");
 		return;
 	}
 	skcb = (void *)skb->cb;
