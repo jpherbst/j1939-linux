@@ -537,13 +537,13 @@ static void j1939tp_rxtask(unsigned long val)
 }
 
 /* receive packet functions */
-static void _j1939xtp_rx_bad_message(struct sk_buff *skb, int extd)
+static void _j1939xtp_rx_bad_message(struct sk_buff *skb, int extd, int reverse)
 {
 	struct session *session;
 	pgn_t pgn;
 
 	pgn = j1939xtp_ctl_to_pgn(skb->data);
-	session = j1939tp_find(sessionq(extd), skb, 0);
+	session = j1939tp_find(sessionq(extd), skb, reverse);
 	if (session /*&& (session->cb->addr.pgn == pgn)*/) {
 		/* do not allow TP control messages on 2 pgn's */
 		j1939_session_cancel(session, ABORT_FAULT);
@@ -559,25 +559,19 @@ static void _j1939xtp_rx_bad_message(struct sk_buff *skb, int extd)
 /* abort packets may come in 2 directions */
 static void j1939xtp_rx_bad_message(struct sk_buff *skb, int extd)
 {
-	struct j1939_sk_buff_cb *cb = j1939_get_cb(skb);
-
 	pr_info("%s, pgn %05x\n", __func__, j1939xtp_ctl_to_pgn(skb->data));
 
-	_j1939xtp_rx_bad_message(skb, extd);
-	j1939_skbcb_swap(cb);
-	_j1939xtp_rx_bad_message(skb, extd);
-
-	/* restore skb */
-	j1939_skbcb_swap(cb);
+	_j1939xtp_rx_bad_message(skb, extd, 0);
+	_j1939xtp_rx_bad_message(skb, extd, 1);
 }
 
-static void _j1939xtp_rx_abort(struct sk_buff *skb, int extd)
+static void _j1939xtp_rx_abort(struct sk_buff *skb, int extd, int reverse)
 {
 	struct session *session;
 	pgn_t pgn;
 
 	pgn = j1939xtp_ctl_to_pgn(skb->data);
-	session = j1939tp_find(sessionq(extd), skb, 0);
+	session = j1939tp_find(sessionq(extd), skb, reverse);
 	if (!session)
 		return;
 	if (session->transmission && !session->last_txcmd) {
@@ -598,17 +592,11 @@ static void _j1939xtp_rx_abort(struct sk_buff *skb, int extd)
 /* abort packets may come in 2 directions */
 static inline void j1939xtp_rx_abort(struct sk_buff *skb, int extd)
 {
-	struct j1939_sk_buff_cb *cb = j1939_get_cb(skb);
-
 	pr_info("%s %i, %05x\n", __func__, skb->skb_iif,
 		j1939xtp_ctl_to_pgn(skb->data));
 
-	_j1939xtp_rx_abort(skb, extd);
-	j1939_skbcb_swap(cb);
-	_j1939xtp_rx_abort(skb, extd);
-
-	/* restore skb */
-	j1939_skbcb_swap(cb);
+	_j1939xtp_rx_abort(skb, extd, 0);
+	_j1939xtp_rx_abort(skb, extd, 1);
 }
 
 static void j1939xtp_rx_eof(struct sk_buff *skb, int extd)
