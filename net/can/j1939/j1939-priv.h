@@ -140,23 +140,23 @@ static inline int j1939_to_sk_priority(int j1939_prio)
 	return 7 - j1939_prio;
 }
 
-static inline int j1939_address_is_valid(u8 sa)
+static inline bool j1939_address_is_valid(u8 sa)
 {
 	return sa != J1939_NO_ADDR;
 }
 
-static inline int j1939_address_is_unicast(u8 sa)
+static inline bool j1939_address_is_unicast(u8 sa)
 {
 	return sa <= SA_MAX_UNICAST;
 }
 
-static inline int pgn_is_pdu1(pgn_t pgn)
+static inline bool pgn_is_pdu1(pgn_t pgn)
 {
 	/* ignore dp & res bits for this */
 	return (pgn & 0xff00) < 0xf000;
 }
 
-static inline int pgn_is_valid(pgn_t pgn)
+static inline bool pgn_is_valid(pgn_t pgn)
 {
 	return pgn <= PGN_MAX;
 }
