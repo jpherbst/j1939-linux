@@ -101,7 +101,7 @@ void j1939_sock_pending_del(struct sock *sk)
 		wake_up(&jsk->waitq);	/* no pending SKB's */
 }
 
-static inline int j1939_no_address(const struct sock *sk)
+static inline bool j1939_no_address(const struct sock *sk)
 {
 	const struct j1939_sock *jsk = j1939_sk(sk);
 
@@ -109,12 +109,12 @@ static inline int j1939_no_address(const struct sock *sk)
 }
 
 /* matches skb control buffer (addr) with a j1939 filter */
-static inline int packet_match(const struct j1939_sk_buff_cb *skcb,
-			       const struct j1939_filter *f, int nfilter)
+static inline bool packet_match(const struct j1939_sk_buff_cb *skcb,
+				const struct j1939_filter *f, int nfilter)
 {
 	if (!nfilter)
 		/* receive all when no filters are assigned */
-		return 1;
+		return true;
 
 	/* Filters relying on the addr for static addressing _should_ get
 	 * packets from dynamic addressed ECU's too if they match their SA.
@@ -127,9 +127,9 @@ static inline int packet_match(const struct j1939_sk_buff_cb *skcb,
 			continue;
 		if ((skcb->srcname & f->name_mask) != (f->name & f->name_mask))
 			continue;
-		return 1;
+		return true;
 	}
-	return 0;
+	return false;
 }
 
 /* callback per socket, called from j1939_recv */
