@@ -55,8 +55,6 @@ struct j1939_ecu {
 	int nusers;
 };
 
-#define to_j1939_ecu(x) container_of((x), struct j1939_ecu, dev)
-
 struct j1939_priv {
 	struct list_head ecus;
 	/* local list entry in priv
@@ -100,8 +98,6 @@ struct j1939_priv {
 	 */
 	int nusers;
 };
-
-#define to_j1939_priv(x) container_of((x), struct j1939_priv, dev)
 
 void put_j1939_ecu(struct j1939_ecu *ecu);
 void put_j1939_priv(struct j1939_priv *segment);
