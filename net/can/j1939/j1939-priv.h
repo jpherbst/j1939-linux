@@ -11,16 +11,16 @@
 #ifndef _J1939_PRIV_H_
 #define _J1939_PRIV_H_
 
+#include <linux/atomic.h>
+#include <linux/if_arp.h>
+#include <linux/interrupt.h>
 #include <linux/kref.h>
 #include <linux/list.h>
-#include <net/sock.h>
-
-#include <linux/proc_fs.h>
 #include <linux/module.h>
+#include <linux/proc_fs.h>
 #include <linux/can/j1939.h>
-#include <linux/atomic.h>
-#include <linux/interrupt.h>
-#include <linux/if_arp.h>
+
+#include <net/sock.h>
 
 #include "../af_can.h"
 
