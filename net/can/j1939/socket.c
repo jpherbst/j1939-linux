@@ -489,8 +489,8 @@ static int j1939sk_setsockopt(struct socket *sock, int level, int optname,
 {
 	struct sock *sk = sock->sk;
 	struct j1939_sock *jsk = j1939_sk(sk);
-	int tmp, count;
-	struct j1939_filter *filters, *ofilters;
+	int tmp, count = 0;
+	struct j1939_filter *filters = NULL, *ofilters;
 
 	if (level != SOL_CAN_J1939)
 		return -EINVAL;
@@ -508,9 +508,6 @@ static int j1939sk_setsockopt(struct socket *sock, int level, int optname,
 				kfree(filters);
 				return -EFAULT;
 			}
-		} else {
-			filters = NULL;
-			count = 0;
 		}
 
 		spin_lock_bh(&j1939_socks_lock);
