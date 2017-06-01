@@ -131,8 +131,7 @@ static inline struct list_head *sessionq(int extd)
 
 static inline void j1939session_destroy(struct session *session)
 {
-	if (session->skb)
-		kfree_skb(session->skb);
+	kfree_skb(session->skb);
 	hrtimer_cancel(&session->rxtimer);
 	hrtimer_cancel(&session->txtimer);
 	tasklet_disable(&session->rxtask);
