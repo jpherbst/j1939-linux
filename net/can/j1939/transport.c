@@ -143,7 +143,6 @@ static inline void j1939session_destroy(struct session *session)
 static void j1939tp_del_work(struct work_struct *work)
 {
 	struct session *session;
-	int cnt = 0;
 
 	do {
 		session = NULL;
@@ -157,7 +156,6 @@ static void j1939tp_del_work(struct work_struct *work)
 		list_del_init(&session->list);
 		spin_unlock_bh(&tp_dellock);
 		j1939session_destroy(session);
-		++cnt;
 	} while (1);
 }
 
