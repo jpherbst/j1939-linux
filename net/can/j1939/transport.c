@@ -346,21 +346,9 @@ static struct session *j1939tp_find(struct list_head *root,
 
 static void j1939_skbcb_swap(struct j1939_sk_buff_cb *cb)
 {
-	name_t name;
-	u8 addr;
-	int flags;
-
-	name = cb->dstname;
-	cb->dstname = cb->srcname;
-	cb->srcname = name;
-
-	addr = cb->dstaddr;
-	cb->dstaddr = cb->srcaddr;
-	cb->srcaddr = addr;
-
-	flags = cb->dstflags;
-	cb->dstflags = cb->srcflags;
-	cb->srcflags = flags;
+	swap(cb->dstname, cb->srcname);
+	swap(cb->dstaddr, cb->srcaddr);
+	swap(cb->dstflags, cb->srcflags);
 }
 
 /* TP transmit packet functions */
