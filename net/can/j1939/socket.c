@@ -501,13 +501,9 @@ static int j1939sk_setsockopt(struct socket *sock, int level, int optname,
 			if (optlen % sizeof(*filters) != 0)
 				return -EINVAL;
 			count = optlen / sizeof(*filters);
-			filters = kmalloc(optlen, GFP_KERNEL);
-			if (!filters)
-				return -ENOMEM;
-			if (copy_from_user(filters, optval, optlen)) {
-				kfree(filters);
-				return -EFAULT;
-			}
+			filters = memdup_user(optval, optlen);
+			if (IS_ERR(filters))
+				return PTR_ERR(filters);
 		}
 
 		spin_lock_bh(&j1939_socks_lock);
