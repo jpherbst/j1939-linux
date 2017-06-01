@@ -51,8 +51,6 @@ static void j1939_can_recv(struct sk_buff *iskb, void *data)
 	struct can_frame *cf;
 	struct addr_ent *paddr;
 
-	BUILD_BUG_ON(sizeof(*skcb) > sizeof(skb->cb));
-
 	/* create a copy of the skb
 	 * j1939 only delivers the real data bytes,
 	 * the header goes into sockaddr.
@@ -71,7 +69,7 @@ static void j1939_can_recv(struct sk_buff *iskb, void *data)
 	skb_trim(skb, min_t(uint8_t, cf->can_dlc, 8));
 
 	/* set addr */
-	skcb = (struct j1939_sk_buff_cb *)skb->cb;
+	skcb = j1939_get_cb(skb);
 	memset(skcb, 0, sizeof(*skcb));
 
 	/* save incoming socket, without assigning the skb to it */
@@ -125,7 +123,7 @@ int j1939_send(struct sk_buff *skb)
 {
 	int ret, dlc;
 	canid_t canid;
-	struct j1939_sk_buff_cb *skcb = (struct j1939_sk_buff_cb *)skb->cb;
+	struct j1939_sk_buff_cb *skcb = j1939_get_cb(skb);
 	struct can_frame *cf;
 
 	if (skb->len > 8)

@@ -37,7 +37,7 @@ static inline name_t candata_to_name(const struct sk_buff *skb)
 
 static inline int ac_msg_is_request_for_ac(struct sk_buff *skb)
 {
-	struct j1939_sk_buff_cb *skcb = (void *)skb->cb;
+	struct j1939_sk_buff_cb *skcb = j1939_get_cb(skb);
 	int req_pgn;
 
 	if ((skb->len < 3) || (skcb->pgn != PGN_REQUEST))
@@ -50,7 +50,7 @@ static inline int ac_msg_is_request_for_ac(struct sk_buff *skb)
 
 static int j1939_verify_outgoing_address_claim(struct sk_buff *skb)
 {
-	struct j1939_sk_buff_cb *skcb = (void *)skb->cb;
+	struct j1939_sk_buff_cb *skcb = j1939_get_cb(skb);
 
 	if (skb->len != 8) {
 		pr_notice("tx address claim with dlc %i\n", skb->len);
@@ -78,7 +78,7 @@ static int j1939_verify_outgoing_address_claim(struct sk_buff *skb)
 int j1939_fixup_address_claim(struct sk_buff *skb)
 {
 	int ret, sa;
-	struct j1939_sk_buff_cb *skcb = (void *)skb->cb;
+	struct j1939_sk_buff_cb *skcb = j1939_get_cb(skb);
 
 	/* network mgmt: address claiming msgs */
 	if (skcb->pgn == PGN_ADDRESS_CLAIMED) {
@@ -124,7 +124,7 @@ int j1939_fixup_address_claim(struct sk_buff *skb)
 
 static void j1939_process_address_claim(struct sk_buff *skb)
 {
-	struct j1939_sk_buff_cb *skcb = (void *)skb->cb;
+	struct j1939_sk_buff_cb *skcb = j1939_get_cb(skb);
 	struct j1939_ecu *ecu, *prev;
 	struct j1939_priv *priv;
 	name_t name;
@@ -192,7 +192,7 @@ static void j1939_process_address_claim(struct sk_buff *skb)
 
 void j1939_recv_address_claim(struct sk_buff *skb, struct j1939_priv *priv)
 {
-	struct j1939_sk_buff_cb *skcb = (void *)skb->cb;
+	struct j1939_sk_buff_cb *skcb = j1939_get_cb(skb);
 	struct j1939_ecu *ecu;
 
 	/* network mgmt */

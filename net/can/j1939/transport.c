@@ -218,7 +218,7 @@ static inline void sessionlist_unlock(void)
  */
 static inline int j1939tp_im_receiver(struct sk_buff *skb)
 {
-	struct j1939_sk_buff_cb *cb = (void *)skb->cb;
+	struct j1939_sk_buff_cb *cb = j1939_get_cb(skb);
 
 	return cb->dstflags & ECU_LOCAL;
 }
@@ -226,7 +226,7 @@ static inline int j1939tp_im_receiver(struct sk_buff *skb)
 /* see if we are sender */
 static inline int j1939tp_im_transmitter(struct sk_buff *skb)
 {
-	struct j1939_sk_buff_cb *cb = (void *)skb->cb;
+	struct j1939_sk_buff_cb *cb = j1939_get_cb(skb);
 
 	return cb->srcflags & ECU_LOCAL;
 }
@@ -239,7 +239,7 @@ static int j1939tp_im_involved(struct sk_buff *skb, int swap)
 
 static int j1939tp_im_involved_anydir(struct sk_buff *skb)
 {
-	struct j1939_sk_buff_cb *cb = (void *)skb->cb;
+	struct j1939_sk_buff_cb *cb = j1939_get_cb(skb);
 
 	return (cb->srcflags | cb->dstflags) & ECU_LOCAL;
 }
@@ -280,7 +280,7 @@ static inline unsigned int j1939etp_ctl_to_size(const u8 *dat)
 static int j1939tp_match(struct session *session, struct sk_buff *skb,
 			 int reverse)
 {
-	struct j1939_sk_buff_cb *cb = (void *)skb->cb;
+	struct j1939_sk_buff_cb *cb = j1939_get_cb(skb);
 
 	if (session->skb_iif != skb->skb_iif)
 		return 0;
@@ -376,7 +376,7 @@ static int j1939tp_tx_dat(struct sk_buff *related, int extd,
 	skb->ip_summed = related->ip_summed;
 
 	memcpy(skb->cb, related->cb, sizeof(skb->cb));
-	skb_cb = (void *)skb->cb;
+	skb_cb = j1939_get_cb(skb);
 	fix_cb(skb_cb);
 	/* fix pgn */
 	skb_cb->pgn = extd ? etp_pgn_dat : tp_pgn_dat;
@@ -414,7 +414,7 @@ static int j1939xtp_do_tx_ctl(struct sk_buff *related, int extd,
 	skb->ip_summed = related->ip_summed;
 
 	memcpy(skb->cb, related->cb, sizeof(skb->cb));
-	skb_cb = (void *)skb->cb;
+	skb_cb = j1939_get_cb(skb);
 	fix_cb(skb_cb);
 	if (swap_src_dst)
 		j1939_skbcb_swap(skb_cb);
@@ -562,7 +562,7 @@ static void _j1939xtp_rx_bad_message(struct sk_buff *skb, int extd)
 /* abort packets may come in 2 directions */
 static void j1939xtp_rx_bad_message(struct sk_buff *skb, int extd)
 {
-	struct j1939_sk_buff_cb *cb = (void *)skb->cb;
+	struct j1939_sk_buff_cb *cb = j1939_get_cb(skb);
 
 	pr_info("%s, pgn %05x\n", __func__, j1939xtp_ctl_to_pgn(skb->data));
 
@@ -601,7 +601,7 @@ static void _j1939xtp_rx_abort(struct sk_buff *skb, int extd)
 /* abort packets may come in 2 directions */
 static inline void j1939xtp_rx_abort(struct sk_buff *skb, int extd)
 {
-	struct j1939_sk_buff_cb *cb = (void *)skb->cb;
+	struct j1939_sk_buff_cb *cb = j1939_get_cb(skb);
 
 	pr_info("%s %i, %05x\n", __func__, skb->skb_iif,
 		j1939xtp_ctl_to_pgn(skb->data));
@@ -701,7 +701,7 @@ static void j1939xtp_rx_cts(struct sk_buff *skb, int extd)
 
 static void j1939xtp_rx_rts(struct sk_buff *skb, int extd)
 {
-	struct j1939_sk_buff_cb *cb = (void *)skb->cb;
+	struct j1939_sk_buff_cb *cb = j1939_get_cb(skb);
 	struct session *session;
 	int len;
 	const u8 *dat;
@@ -1141,7 +1141,7 @@ static int j1939session_insert(struct session *session)
 /* j1939 main intf */
 int j1939_send_transport(struct sk_buff *skb)
 {
-	struct j1939_sk_buff_cb *cb = (void *)skb->cb;
+	struct j1939_sk_buff_cb *cb = j1939_get_cb(skb);
 	struct session *session;
 	int ret;
 	struct j1939_priv *priv;
@@ -1218,7 +1218,7 @@ int j1939_send_transport(struct sk_buff *skb)
 
 int j1939_recv_transport(struct sk_buff *skb)
 {
-	struct j1939_sk_buff_cb *cb = (void *)skb->cb;
+	struct j1939_sk_buff_cb *cb = j1939_get_cb(skb);
 	const u8 *dat;
 
 	switch (cb->pgn) {
@@ -1302,7 +1302,7 @@ static struct session *j1939session_fresh_new(int size,
 	if (!skb)
 		return NULL;
 
-	cb = (void *)skb->cb;
+	cb = j1939_get_cb(skb);
 	memcpy(cb, rel_skb->cb, sizeof(*cb));
 	fix_cb(cb);
 	cb->pgn = pgn;
@@ -1331,7 +1331,7 @@ static struct session *j1939session_new(struct sk_buff *skb)
 	spin_lock_init(&session->lock);
 	session->skb = skb;
 
-	session->cb = (void *)session->skb->cb;
+	session->cb = j1939_get_cb(session->skb);
 	hrtimer_init(&session->txtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	session->txtimer.function = j1939tp_txtimer;
 	hrtimer_init(&session->rxtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);

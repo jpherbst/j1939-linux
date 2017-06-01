@@ -216,6 +216,13 @@ struct j1939_sk_buff_cb {
 	struct sock *insock;
 };
 
+static inline struct j1939_sk_buff_cb *j1939_get_cb(struct sk_buff *skb)
+{
+	BUILD_BUG_ON(sizeof(struct j1939_sk_buff_cb) > sizeof(skb->cb));
+
+	return (struct j1939_sk_buff_cb *)skb->cb;
+}
+
 #define J1939_MSG_RESERVED MSG_SYN
 #define J1939_MSG_SYNC MSG_SYN
 
