@@ -76,6 +76,8 @@ struct j1939_filter {
 	pgn_t pgn_mask;
 };
 
+#define J1939_FILTER_MAX 512 /* maximum number of j1939_filter set via setsockopt() */
+
 /* RTNETLINK */
 enum {
 	IFLA_J1939_UNSPEC,

@@ -500,6 +500,10 @@ static int j1939sk_setsockopt(struct socket *sock, int level, int optname,
 		if (optval) {
 			if (optlen % sizeof(*filters) != 0)
 				return -EINVAL;
+
+			if (optlen > J1939_FILTER_MAX * sizeof(struct j1939_filter))
+				return -EINVAL;
+
 			count = optlen / sizeof(*filters);
 			filters = memdup_user(optval, optlen);
 			if (IS_ERR(filters))
