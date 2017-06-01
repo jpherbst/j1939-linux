@@ -37,10 +37,10 @@ struct j1939_sock {
 
 	int state;
 
-#define JSK_BOUND BIT(0)
-#define JSK_CONNECTED BIT(1)
-#define PROMISC BIT(2)
-#define RECV_OWN BIT(3)
+#define J1939_SOCK_BOUND BIT(0)
+#define J1939_SOCK_CONNECTED BIT(1)
+#define J1939_SOCK_PROMISC BIT(2)
+#define J1939_SOCK_RECV_OWN BIT(3)
 
 	int ifindex_started; /* ifindex of netdev */
 
@@ -138,13 +138,13 @@ static void j1939sk_recv_skb(struct sk_buff *oskb, struct j1939_sock *jsk)
 	struct sk_buff *skb;
 	struct j1939_sk_buff_cb *skcb = j1939_get_cb(oskb);
 
-	if (!(jsk->state & (JSK_BOUND | JSK_CONNECTED)))
+	if (!(jsk->state & (J1939_SOCK_BOUND | J1939_SOCK_CONNECTED)))
 		return;
 	if (jsk->sk.sk_bound_dev_if &&
 	    (jsk->sk.sk_bound_dev_if != oskb->skb_iif))
 		/* this socket does not take packets from this iface */
 		return;
-	if (!(jsk->state & PROMISC)) {
+	if (!(jsk->state & J1939_SOCK_PROMISC)) {
 		if (jsk->addr.src) {
 			/* reject message for other destinations */
 			if (skcb->dstname &&
@@ -164,7 +164,7 @@ static void j1939sk_recv_skb(struct sk_buff *oskb, struct j1939_sock *jsk)
 		}
 	}
 
-	if ((skcb->insock == &jsk->sk) && !(jsk->state & RECV_OWN))
+	if ((skcb->insock == &jsk->sk) && !(jsk->state & J1939_SOCK_RECV_OWN))
 		/* own message */
 		return;
 
@@ -305,12 +305,12 @@ static int j1939sk_bind(struct socket *sock, struct sockaddr *uaddr, int len)
 	if (pgn_is_valid(addr->can_addr.j1939.pgn))
 		jsk->addr.pgn = addr->can_addr.j1939.pgn;
 
-	if (!(jsk->state & (JSK_BOUND | JSK_CONNECTED))) {
+	if (!(jsk->state & (J1939_SOCK_BOUND | J1939_SOCK_CONNECTED))) {
 		spin_lock_bh(&j1939_socks_lock);
 		list_add_tail(&jsk->list, &j1939_socks);
 		spin_unlock_bh(&j1939_socks_lock);
 	}
-	jsk->state |= JSK_BOUND;
+	jsk->state |= J1939_SOCK_BOUND;
 
 	ret = 0;
 
@@ -386,12 +386,12 @@ static int j1939sk_connect(struct socket *sock, struct sockaddr *uaddr,
 	if (pgn_is_valid(addr->can_addr.j1939.pgn))
 		jsk->addr.pgn = addr->can_addr.j1939.pgn;
 
-	if (!(jsk->state & (JSK_BOUND | JSK_CONNECTED))) {
+	if (!(jsk->state & (J1939_SOCK_BOUND | J1939_SOCK_CONNECTED))) {
 		spin_lock_bh(&j1939_socks_lock);
 		list_add_tail(&jsk->list, &j1939_socks);
 		spin_unlock_bh(&j1939_socks_lock);
 	}
-	jsk->state |= JSK_CONNECTED;
+	jsk->state |= J1939_SOCK_CONNECTED;
 	ret = 0;
 
  fail_locked:
@@ -419,7 +419,7 @@ static int j1939sk_getname(struct socket *sock, struct sockaddr *uaddr,
 
 	lock_sock(sk);
 
-	if (peer && !(jsk->state & JSK_CONNECTED)) {
+	if (peer && !(jsk->state & J1939_SOCK_CONNECTED)) {
 		ret = -EADDRNOTAVAIL;
 		goto failure;
 	}
@@ -521,9 +521,9 @@ static int j1939sk_setsockopt(struct socket *sock, int level, int optname,
 		kfree(ofilters);
 		return 0;
 	case SO_J1939_PROMISC:
-		return j1939sk_setsockopt_flag(jsk, optval, optlen, PROMISC);
+		return j1939sk_setsockopt_flag(jsk, optval, optlen, J1939_SOCK_PROMISC);
 	case SO_J1939_RECV_OWN:
-		return j1939sk_setsockopt_flag(jsk, optval, optlen, RECV_OWN);
+		return j1939sk_setsockopt_flag(jsk, optval, optlen, J1939_SOCK_RECV_OWN);
 	case SO_J1939_SEND_PRIO:
 		if (optlen != sizeof(tmp))
 			return -EINVAL;
@@ -563,10 +563,10 @@ static int j1939sk_getsockopt(struct socket *sock, int level, int optname,
 	lock_sock(&jsk->sk);
 	switch (optname) {
 	case SO_J1939_PROMISC:
-		tmp = (jsk->state & PROMISC) ? 1 : 0;
+		tmp = (jsk->state & J1939_SOCK_PROMISC) ? 1 : 0;
 		break;
 	case SO_J1939_RECV_OWN:
-		tmp = (jsk->state & RECV_OWN) ? 1 : 0;
+		tmp = (jsk->state & J1939_SOCK_RECV_OWN) ? 1 : 0;
 		break;
 	case SO_J1939_SEND_PRIO:
 		tmp = j1939_prio(jsk->sk.sk_priority);
@@ -659,7 +659,7 @@ static int j1939sk_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 	int ret;
 
 	/* various socket state tests */
-	if (!(jsk->state & JSK_BOUND))
+	if (!(jsk->state & J1939_SOCK_BOUND))
 		return -EBADFD;
 
 	ifindex = jsk->ifindex_started;
