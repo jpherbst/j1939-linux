@@ -247,7 +247,7 @@ int j1939_netdev_start(struct net_device *netdev)
 	priv->nusers = 1;
 
 	/* add CAN handler */
-	ret = can_rx_register(netdev, J1939_CAN_ID, J1939_CAN_MASK,
+	ret = can_rx_register(&init_net, netdev, J1939_CAN_ID, J1939_CAN_MASK,
 			      j1939_can_recv, priv, "j1939", NULL);
 	if (ret < 0)
 		goto fail_can;
@@ -288,8 +288,8 @@ void j1939_netdev_stop(struct net_device *netdev)
 	can_ml_priv->j1939_priv = NULL;
 	mutex_unlock(&j1939_netdev_lock);
 
-	can_rx_unregister(netdev, J1939_CAN_ID, J1939_CAN_MASK,
-			j1939_can_recv, priv);
+	can_rx_unregister(&init_net, netdev, J1939_CAN_ID, J1939_CAN_MASK,
+			  j1939_can_recv, priv);
 
 	/* remove pending transport protocol sessions */
 	j1939tp_rmdev_notifier(netdev);
