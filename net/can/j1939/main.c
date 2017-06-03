@@ -218,7 +218,7 @@ int j1939_netdev_start(struct net_device *netdev)
 {
 	int ret;
 	struct j1939_priv *priv;
-	struct dev_rcv_lists *can_ml_priv;
+	struct can_dev_rcv_lists *can_ml_priv;
 
 	BUG_ON(!netdev);
 	if (netdev->type != ARPHRD_CAN)
@@ -267,7 +267,7 @@ fail_mem:
 
 void j1939_netdev_stop(struct net_device *netdev)
 {
-	struct dev_rcv_lists *can_ml_priv;
+	struct can_dev_rcv_lists *can_ml_priv;
 	struct j1939_priv *priv;
 
 	BUG_ON(!netdev);
