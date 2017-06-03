@@ -217,7 +217,7 @@ int can_send(struct sk_buff *skb, int loop)
 {
 	struct sk_buff *newskb = NULL;
 	struct canfd_frame *cfd = (struct canfd_frame *)skb->data;
-	struct s_stats *can_stats = dev_net(skb->dev)->can.can_stats;
+	struct can_stats *can_stats = dev_net(skb->dev)->can.can_stats;
 	int err = -EINVAL;
 
 	if (skb->len == CAN_MTU) {
@@ -321,8 +321,8 @@ EXPORT_SYMBOL(can_send);
  * af_can rx path
  */
 
-static struct dev_rcv_lists *find_dev_rcv_lists(struct net *net,
-						struct net_device *dev)
+static struct dev_rcv_lists *can_dev_rcv_lists_find(struct net *net,
+						    struct net_device *dev)
 {
 	if (!dev)
 		return net->can.can_rx_alldev_list;
@@ -465,7 +465,7 @@ int can_rx_register(struct net *net, struct net_device *dev, canid_t can_id,
 	struct receiver *r;
 	struct hlist_head *rl;
 	struct dev_rcv_lists *d;
-	struct s_pstats *can_pstats = net->can.can_pstats;
+	struct can_pstats *can_pstats = net->can.can_pstats;
 	int err = 0;
 
 	/* insert new receiver  (dev,canid,mask) -> (func,data) */
@@ -482,7 +482,7 @@ int can_rx_register(struct net *net, struct net_device *dev, canid_t can_id,
 
 	spin_lock(&net->can.can_rcvlists_lock);
 
-	d = find_dev_rcv_lists(net, dev);
+	d = can_dev_rcv_lists_find(net, dev);
 	if (d) {
 		rl = find_rcv_list(&can_id, &mask, d);
 
@@ -541,7 +541,7 @@ void can_rx_unregister(struct net *net, struct net_device *dev, canid_t can_id,
 {
 	struct receiver *r = NULL;
 	struct hlist_head *rl;
-	struct s_pstats *can_pstats = net->can.can_pstats;
+	struct can_pstats *can_pstats = net->can.can_pstats;
 	struct dev_rcv_lists *d;
 
 	if (dev && dev->type != ARPHRD_CAN)
@@ -552,7 +552,7 @@ void can_rx_unregister(struct net *net, struct net_device *dev, canid_t can_id,
 
 	spin_lock(&net->can.can_rcvlists_lock);
 
-	d = find_dev_rcv_lists(net, dev);
+	d = can_dev_rcv_lists_find(net, dev);
 	if (!d) {
 		pr_err("BUG: receive list not found for "
 		       "dev %s, id %03X, mask %03X\n",
@@ -684,7 +684,7 @@ static void can_receive(struct sk_buff *skb, struct net_device *dev)
 {
 	struct dev_rcv_lists *d;
 	struct net *net = dev_net(dev);
-	struct s_stats *can_stats = net->can.can_stats;
+	struct can_stats *can_stats = net->can.can_stats;
 	int matches;
 
 	/* update statistics */
@@ -701,7 +701,7 @@ static void can_receive(struct sk_buff *skb, struct net_device *dev)
 	matches = can_rcv_filter(net->can.can_rx_alldev_list, skb);
 
 	/* find receive list for this device */
-	d = find_dev_rcv_lists(net, dev);
+	d = can_dev_rcv_lists_find(net, dev);
 	if (d)
 		matches += can_rcv_filter(d, skb);
 
