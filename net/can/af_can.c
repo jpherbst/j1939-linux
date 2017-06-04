@@ -498,8 +498,8 @@ int can_rx_register(struct net *net, struct net_device *dev, canid_t can_id,
 		dev_rcv_lists->entries++;
 
 		can_pstats->rcv_entries++;
-		if (can_pstats->rcv_entries_max < can_pstats->rcv_entries)
-			can_pstats->rcv_entries_max = can_pstats->rcv_entries;
+		can_pstats->rcv_entries_max = max(can_pstats->rcv_entries_max,
+						  can_pstats->rcv_entries);
 	} else {
 		kmem_cache_free(rcv_cache, rcv);
 		err = -ENODEV;
