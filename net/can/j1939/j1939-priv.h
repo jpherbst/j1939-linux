@@ -73,6 +73,11 @@ struct j1939_priv {
 
 	int ifindex;
 	struct net_device *netdev;
+
+	/* list of 256 ecu ptrs, that cache the claimed addresses.
+	 * also protected by the above lock
+	 * don't use directly, use j1939_ecu_set_address() instead
+	 */
 	struct addr_ent {
 		ktime_t rxtime;
 		struct j1939_ecu *ecu;
@@ -87,10 +92,6 @@ struct j1939_priv {
 	 */
 	struct tasklet_struct ac_task;
 
-	/* list of 256 ecu ptrs, that cache the claimed addresses.
-	 * also protected by the above lock
-	 * don't use directly, use j1939_ecu_set_address() instead
-	 */
 	struct kref kref;
 
 	/* ref counter that hold the number of active listeners.
