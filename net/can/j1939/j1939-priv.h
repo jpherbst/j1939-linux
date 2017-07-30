@@ -108,11 +108,6 @@ static inline void get_j1939_ecu(struct j1939_ecu *dut)
 	kref_get(&dut->kref);
 }
 
-static inline void get_j1939_priv(struct j1939_priv *dut)
-{
-	kref_get(&dut->kref);
-}
-
 /* keep the cache of what is local */
 void j1939_addr_local_get(struct j1939_priv *priv, int sa);
 void j1939_addr_local_put(struct j1939_priv *priv, int sa);
@@ -264,7 +259,7 @@ static inline struct j1939_priv *dev_j1939_priv(struct net_device *dev)
 	priv = can_ml_priv ? can_ml_priv->j1939_priv : NULL;
 
 	if (priv)
-		get_j1939_priv(priv);
+		kref_get(&priv->kref);
 
 	return priv;
 }
