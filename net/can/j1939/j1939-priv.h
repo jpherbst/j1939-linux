@@ -18,6 +18,7 @@
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/proc_fs.h>
+#include <linux/can/can-ml.h>
 #include <linux/can/j1939.h>
 
 #include <net/sock.h>
@@ -249,14 +250,14 @@ void j1939_netdev_stop(struct net_device *);
 
 static inline struct j1939_priv *j1939_priv_get(struct net_device *dev)
 {
-	struct can_dev_rcv_lists *can_ml_priv;
+	struct can_ml_priv *can_ml_priv;
 	struct j1939_priv *priv;
 
 	if (dev->type != ARPHRD_CAN)
 		return NULL;
 
 	can_ml_priv = dev->ml_priv;
-	priv = can_ml_priv ? can_ml_priv->j1939_priv : NULL;
+	priv = can_ml_priv->j1939_priv;
 
 	if (priv)
 		kref_get(&priv->kref);

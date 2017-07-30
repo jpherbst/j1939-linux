@@ -204,7 +204,7 @@ int j1939_netdev_start(struct net_device *netdev)
 {
 	int ret;
 	struct j1939_priv *priv;
-	struct can_dev_rcv_lists *can_ml_priv;
+	struct can_ml_priv *can_ml_priv;
 
 	if (netdev->type != ARPHRD_CAN)
 		return -EAFNOSUPPORT;
@@ -252,7 +252,7 @@ int j1939_netdev_start(struct net_device *netdev)
 
 void j1939_netdev_stop(struct net_device *netdev)
 {
-	struct can_dev_rcv_lists *can_ml_priv;
+	struct can_ml_priv *can_ml_priv;
 	struct j1939_priv *priv;
 
 	if (netdev->type != ARPHRD_CAN)
