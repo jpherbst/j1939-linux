@@ -275,10 +275,11 @@ static inline struct j1939_priv *j1939_priv_find(int ifindex)
 	struct net_device *netdev;
 
 	netdev = dev_get_by_index(&init_net, ifindex);
-	priv = dev_j1939_priv(netdev);
+	if (!netdev)
+		return NULL;
 
-	if (netdev)
-		dev_put(netdev);
+	priv = dev_j1939_priv(netdev);
+	dev_put(netdev);
 
 	return priv;
 }
