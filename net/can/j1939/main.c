@@ -309,7 +309,7 @@ void put_j1939_priv(struct j1939_priv *segment)
 static int j1939_netdev_notify(struct notifier_block *nb,
 			       unsigned long msg, void *data)
 {
-	struct net_device *netdev = (struct net_device *)data;
+	struct net_device *netdev = netdev_notifier_info_to_dev(data);
 
 	if (!net_eq(dev_net(netdev), &init_net))
 		return NOTIFY_DONE;
