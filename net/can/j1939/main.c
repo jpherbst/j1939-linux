@@ -279,7 +279,7 @@ void j1939_netdev_stop(struct net_device *netdev)
 	j1939tp_rmdev_notifier(netdev);
 
 	/* final put */
-	put_j1939_priv(priv);
+	j1939_priv_put(priv);
 	dev_put(netdev);
 }
 
@@ -301,7 +301,7 @@ static void on_put_j1939_priv(struct kref *kref)
 	kfree(priv);
 }
 
-void put_j1939_priv(struct j1939_priv *segment)
+void j1939_priv_put(struct j1939_priv *segment)
 {
 	kref_put(&segment->kref, on_put_j1939_priv);
 }
@@ -345,7 +345,7 @@ static int j1939_proc_show_addr(struct seq_file *sqf, void *v)
 	seq_puts(sqf, "iface\tsa\t#users\n");
 	rcu_read_lock();
 	for_each_netdev_rcu(&init_net, netdev) {
-		priv = dev_j1939_priv(netdev);
+		priv = j1939_priv_get(netdev);
 		if (!priv)
 			continue;
 		read_lock_bh(&priv->lock);
@@ -370,7 +370,7 @@ static int j1939_proc_show_name(struct seq_file *sqf, void *v)
 	seq_puts(sqf, "iface\tname\tsa\t#users\n");
 	rcu_read_lock();
 	for_each_netdev_rcu(&init_net, netdev) {
-		priv = dev_j1939_priv(netdev);
+		priv = j1939_priv_get(netdev);
 		if (!priv)
 			continue;
 		read_lock_bh(&priv->lock);

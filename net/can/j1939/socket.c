@@ -282,7 +282,7 @@ static int j1939sk_bind(struct socket *sock, struct sockaddr *uaddr, int len)
 		priv = j1939_priv_find(jsk->ifindex_started);
 		j1939_name_local_get(priv, jsk->addr.src);
 		j1939_addr_local_get(priv, jsk->addr.sa);
-		put_j1939_priv(priv);
+		j1939_priv_put(priv);
 	}
 
 	jsk->sk.sk_bound_dev_if = bound_dev_if;
@@ -295,7 +295,7 @@ static int j1939sk_bind(struct socket *sock, struct sockaddr *uaddr, int len)
 		j1939_name_local_get(priv, addr->can_addr.j1939.name);
 		j1939_addr_local_put(priv, jsk->addr.sa);
 		j1939_addr_local_get(priv, addr->can_addr.j1939.addr);
-		put_j1939_priv(priv);
+		j1939_priv_put(priv);
 	}
 	jsk->addr.src = addr->can_addr.j1939.name;
 	jsk->addr.sa = addr->can_addr.j1939.addr;
@@ -372,7 +372,7 @@ static int j1939sk_connect(struct socket *sock, struct sockaddr *uaddr,
 		priv = j1939_priv_find(jsk->ifindex_started);
 		j1939_name_local_get(priv, jsk->addr.src);
 		j1939_addr_local_get(priv, jsk->addr.sa);
-		put_j1939_priv(priv);
+		j1939_priv_put(priv);
 	}
 
 	/* lookup destination */
@@ -450,7 +450,7 @@ static int j1939sk_release(struct socket *sock)
 		priv = j1939_priv_find(jsk->ifindex_started);
 		j1939_addr_local_put(priv, jsk->addr.sa);
 		j1939_name_local_put(priv, jsk->addr.src);
-		put_j1939_priv(priv);
+		j1939_priv_put(priv);
 
 		j1939_ifindex_stop(jsk->ifindex_started);
 	}

@@ -187,7 +187,7 @@ static void j1939_process_address_claim(struct sk_buff *skb)
 	ecu->rxtime = ktime_get();
  done:
 	write_unlock_bh(&priv->lock);
-	put_j1939_priv(priv);
+	j1939_priv_put(priv);
 }
 
 void j1939_recv_address_claim(struct sk_buff *skb, struct j1939_priv *priv)

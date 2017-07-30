@@ -114,7 +114,7 @@ struct j1939_ecu *j1939_ecu_find_by_addr(int sa, int ifindex)
 	if (ecu)
 		get_j1939_ecu(ecu);
 	read_unlock_bh(&priv->lock);
-	put_j1939_priv(priv);
+	j1939_priv_put(priv);
 	return ecu;
 }
 
@@ -141,7 +141,7 @@ int j1939_name_to_sa(name_t name, int ifindex)
 		}
 	}
 	read_unlock_bh(&priv->lock);
-	put_j1939_priv(priv);
+	j1939_priv_put(priv);
 	return sa;
 }
 
@@ -178,7 +178,7 @@ struct j1939_ecu *j1939_ecu_find_by_name(name_t name, int ifindex)
 	if (!priv)
 		return NULL;
 	ecu = _j1939_ecu_find_by_name(name, priv);
-	put_j1939_priv(priv);
+	j1939_priv_put(priv);
 	return ecu;
 }
 

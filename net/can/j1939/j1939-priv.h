@@ -101,7 +101,7 @@ struct j1939_priv {
 };
 
 void put_j1939_ecu(struct j1939_ecu *ecu);
-void put_j1939_priv(struct j1939_priv *segment);
+void j1939_priv_put(struct j1939_priv *segment);
 
 static inline void get_j1939_ecu(struct j1939_ecu *dut)
 {
@@ -247,7 +247,7 @@ void _j1939_ecu_unregister(struct j1939_ecu *);
 int j1939_netdev_start(struct net_device *);
 void j1939_netdev_stop(struct net_device *);
 
-static inline struct j1939_priv *dev_j1939_priv(struct net_device *dev)
+static inline struct j1939_priv *j1939_priv_get(struct net_device *dev)
 {
 	struct can_dev_rcv_lists *can_ml_priv;
 	struct j1939_priv *priv;
@@ -273,7 +273,7 @@ static inline struct j1939_priv *j1939_priv_find(int ifindex)
 	if (!netdev)
 		return NULL;
 
-	priv = dev_j1939_priv(netdev);
+	priv = j1939_priv_get(netdev);
 	dev_put(netdev);
 
 	return priv;

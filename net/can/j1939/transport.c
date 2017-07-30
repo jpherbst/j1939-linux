@@ -1169,7 +1169,7 @@ int j1939_send_transport(struct sk_buff *skb)
 	    (j1939_address_is_unicast(cb->dstaddr) &&
 	     priv->ents[cb->dstaddr].nusers))
 		cb->dstflags |= ECU_LOCAL;
-	put_j1939_priv(priv);
+	j1939_priv_put(priv);
 	/* src is always local, I'm sending ... */
 	cb->srcflags |= ECU_LOCAL;
 
