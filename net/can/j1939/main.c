@@ -356,6 +356,7 @@ static int j1939_proc_show_addr(struct seq_file *sqf, void *v)
 				   netdev->name, j, priv->ents[j].nusers);
 		}
 		read_unlock_bh(&priv->lock);
+		j1939_priv_put(priv);
 	}
 	rcu_read_unlock();
 	return 0;
@@ -380,6 +381,7 @@ static int j1939_proc_show_name(struct seq_file *sqf, void *v)
 				   (priv->ents[ecu->sa].ecu == ecu) ? "" : "?",
 				   ecu->nusers);
 		read_unlock_bh(&priv->lock);
+		j1939_priv_put(priv);
 	}
 	rcu_read_unlock();
 	return 0;
