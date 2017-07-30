@@ -292,7 +292,7 @@ static struct net *vxcan_get_link_net(const struct net_device *dev)
 
 static struct rtnl_link_ops vxcan_link_ops = {
 	.kind		= DRV_NAME,
-	.priv_size	= sizeof(struct vxcan_priv),
+	.priv_size	= ALIGN(sizeof(struct vxcan_priv), NETDEV_ALIGN) + sizeof(struct can_ml_priv);
 	.setup		= vxcan_setup,
 	.newlink	= vxcan_newlink,
 	.dellink	= vxcan_dellink,

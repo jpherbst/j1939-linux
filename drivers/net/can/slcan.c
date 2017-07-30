@@ -514,6 +514,7 @@ static struct slcan *slc_alloc(dev_t line)
 	char name[IFNAMSIZ];
 	struct net_device *dev = NULL;
 	struct slcan       *sl;
+	int size;
 
 	for (i = 0; i < maxdev; i++) {
 		dev = slcan_devs[i];
@@ -527,7 +528,8 @@ static struct slcan *slc_alloc(dev_t line)
 		return NULL;
 
 	sprintf(name, "slcan%d", i);
-	dev = alloc_netdev(sizeof(*sl), name, NET_NAME_UNKNOWN, slc_setup);
+	size = ALIGN(sizeof(*sl), NETDEV_ALIGN) + sizeof(struct can_ml_priv);
+	dev = alloc_netdev(size, name, NET_NAME_UNKNOWN, slc_setup);
 	if (!dev)
 		return NULL;
 
