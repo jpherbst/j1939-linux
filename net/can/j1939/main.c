@@ -423,7 +423,9 @@ static __init int j1939_module_init(void)
 	if (!j1939_procdir)
 		return -EINVAL;
 
-	register_netdevice_notifier(&j1939_netdev_notifier);
+	ret = register_netdevice_notifier(&j1939_netdev_notifier);
+	if (ret)
+		goto fail_notifier;
 
 	ret = can_proto_register(&j1939_can_proto);
 	if (ret < 0) {
@@ -440,7 +442,6 @@ static __init int j1939_module_init(void)
 		goto fail_name;
 	return 0;
 
-	remove_proc_entry("name", j1939_procdir);
  fail_name:
 	remove_proc_entry("addr", j1939_procdir);
  fail_addr:
@@ -449,6 +450,7 @@ static __init int j1939_module_init(void)
 	can_proto_unregister(&j1939_can_proto);
  fail_sk:
 	unregister_netdevice_notifier(&j1939_netdev_notifier);
+ fail_notifier:
 	proc_remove(j1939_procdir);
 	j1939_procdir = NULL;
 	return ret;
