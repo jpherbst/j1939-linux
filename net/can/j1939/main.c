@@ -92,7 +92,7 @@ static void j1939_can_recv(struct sk_buff *iskb, void *data)
 	if (j1939_address_is_unicast(skcb->srcaddr)) {
 		paddr = &priv->ents[skcb->srcaddr];
 		paddr->rxtime = ktime_get();
-		if (paddr->ecu && skcb->pgn != 0x0ee00)
+		if (paddr->ecu && skcb->pgn != PGN_ADDRESS_CLAIMED)
 			paddr->ecu->rxtime = paddr->rxtime;
 	}
 	write_unlock_bh(&priv->lock);
