@@ -18,7 +18,6 @@
 #include <linux/socket.h>
 #include <linux/list.h>
 #include <linux/if_arp.h>
-#include <net/tcp_states.h>
 
 #include <linux/can/core.h>
 #include <linux/can/skb.h>
