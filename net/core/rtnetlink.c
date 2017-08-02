@@ -2424,6 +2424,8 @@ struct net_device *rtnl_create_link(struct net *net,
 	else if (ops->get_num_rx_queues)
 		num_rx_queues = ops->get_num_rx_queues();
 
+	printk("%s: ifname=%s, priv_size=%zu\n", __func__, ifname, ops->priv_size);
+
 	dev = alloc_netdev_mqs(ops->priv_size, ifname, name_assign_type,
 			       ops->setup, num_tx_queues, num_rx_queues);
 	if (!dev)
