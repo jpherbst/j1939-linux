@@ -106,7 +106,7 @@ struct j1939_ecu *j1939_ecu_find_by_addr(int sa, int ifindex)
 
 	if (!j1939_address_is_unicast(sa))
 		return NULL;
-	priv = j1939_priv_find(ifindex);
+	priv = j1939_priv_get_by_ifindex(ifindex);
 	if (!priv)
 		return NULL;
 	read_lock_bh(&priv->lock);
@@ -126,7 +126,7 @@ int j1939_name_to_sa(name_t name, int ifindex)
 
 	if (!name)
 		return J1939_NO_ADDR;
-	priv = j1939_priv_find(ifindex);
+	priv = j1939_priv_get_by_ifindex(ifindex);
 	if (!priv)
 		return J1939_NO_ADDR;
 
@@ -174,7 +174,7 @@ struct j1939_ecu *j1939_ecu_find_by_name(name_t name, int ifindex)
 		return NULL;
 	if (!ifindex)
 		return NULL;
-	priv = j1939_priv_find(ifindex);
+	priv = j1939_priv_get_by_ifindex(ifindex);
 	if (!priv)
 		return NULL;
 	ecu = _j1939_ecu_find_by_name(name, priv);

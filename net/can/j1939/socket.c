@@ -279,7 +279,7 @@ static int j1939sk_bind(struct socket *sock, struct sockaddr *uaddr, int len)
 		if (ret < 0)
 			goto fail_locked;
 		jsk->ifindex_started = bound_dev_if;
-		priv = j1939_priv_find(jsk->ifindex_started);
+		priv = j1939_priv_get_by_ifindex(jsk->ifindex_started);
 		j1939_name_local_get(priv, jsk->addr.src);
 		j1939_addr_local_get(priv, jsk->addr.sa);
 		j1939_priv_put(priv);
@@ -289,7 +289,7 @@ static int j1939sk_bind(struct socket *sock, struct sockaddr *uaddr, int len)
 
 	/* set addr + name */
 	if (jsk->ifindex_started) {
-		priv = j1939_priv_find(jsk->ifindex_started);
+		priv = j1939_priv_get_by_ifindex(jsk->ifindex_started);
 		/* priv should be set when ifindex_started is nonzero */
 		j1939_name_local_put(priv, jsk->addr.src);
 		j1939_name_local_get(priv, addr->can_addr.j1939.name);
@@ -369,7 +369,7 @@ static int j1939sk_connect(struct socket *sock, struct sockaddr *uaddr,
 			goto fail_locked;
 		jsk->ifindex_started = bound_dev_if;
 		/* make sure that this is in sync */
-		priv = j1939_priv_find(jsk->ifindex_started);
+		priv = j1939_priv_get_by_ifindex(jsk->ifindex_started);
 		j1939_name_local_get(priv, jsk->addr.src);
 		j1939_addr_local_get(priv, jsk->addr.sa);
 		j1939_priv_put(priv);
@@ -447,7 +447,7 @@ static int j1939sk_release(struct socket *sock)
 	spin_unlock_bh(&j1939_socks_lock);
 
 	if (jsk->ifindex_started) {
-		priv = j1939_priv_find(jsk->ifindex_started);
+		priv = j1939_priv_get_by_ifindex(jsk->ifindex_started);
 		j1939_addr_local_put(priv, jsk->addr.sa);
 		j1939_name_local_put(priv, jsk->addr.src);
 		j1939_priv_put(priv);

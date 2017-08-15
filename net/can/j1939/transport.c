@@ -1162,7 +1162,7 @@ int j1939_send_transport(struct sk_buff *skb)
 		return ret;
 
 	/* fix dstflags, it may be used there soon */
-	priv = j1939_priv_find(can_skb_prv(skb)->ifindex);
+	priv = j1939_priv_get_by_ifindex(can_skb_prv(skb)->ifindex);
 	if (!priv)
 		return -EINVAL;
 	if (!j1939_address_is_valid(cb->dstaddr) ||

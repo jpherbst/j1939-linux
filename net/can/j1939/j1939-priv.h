@@ -265,7 +265,7 @@ static inline struct j1939_priv *j1939_priv_get(struct net_device *dev)
 	return priv;
 }
 
-static inline struct j1939_priv *j1939_priv_find(int ifindex)
+static inline struct j1939_priv *j1939_priv_get_by_ifindex(int ifindex)
 {
 	struct j1939_priv *priv;
 	struct net_device *netdev;

@@ -146,7 +146,7 @@ static void j1939_process_address_claim(struct sk_buff *skb)
 		return;
 	}
 
-	priv = j1939_priv_find(skb->skb_iif);
+	priv = j1939_priv_get_by_ifindex(skb->skb_iif);
 	if (!priv)
 		return;
 
