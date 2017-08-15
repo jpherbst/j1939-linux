@@ -110,8 +110,8 @@ static inline void get_j1939_ecu(struct j1939_ecu *dut)
 }
 
 /* keep the cache of what is local */
-void j1939_addr_local_get(struct j1939_priv *priv, int sa);
-void j1939_addr_local_put(struct j1939_priv *priv, int sa);
+void j1939_addr_local_get(struct j1939_priv *priv, u8 sa);
+void j1939_addr_local_put(struct j1939_priv *priv, u8 sa);
 void j1939_name_local_get(struct j1939_priv *priv, name_t name);
 void j1939_name_local_put(struct j1939_priv *priv, name_t name);
 

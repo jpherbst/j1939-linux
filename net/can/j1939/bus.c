@@ -187,7 +187,7 @@ struct j1939_ecu *j1939_ecu_find_by_name(name_t name, int ifindex)
  * These functions originate from userspace manipulating sockets,
  * so locking is straigforward
  */
-void j1939_addr_local_get(struct j1939_priv *priv, int sa)
+void j1939_addr_local_get(struct j1939_priv *priv, u8 sa)
 {
 	if (!j1939_address_is_unicast(sa))
 		return;
@@ -196,7 +196,7 @@ void j1939_addr_local_get(struct j1939_priv *priv, int sa)
 	write_unlock_bh(&priv->lock);
 }
 
-void j1939_addr_local_put(struct j1939_priv *priv, int sa)
+void j1939_addr_local_put(struct j1939_priv *priv, u8 sa)
 {
 	if (!j1939_address_is_unicast(sa))
 		return;
