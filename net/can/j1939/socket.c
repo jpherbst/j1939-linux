@@ -43,14 +43,7 @@ struct j1939_sock {
 
 	int ifindex_started; /* ifindex of netdev */
 
-	struct {
-		name_t src;
-		name_t dst;
-		pgn_t pgn;
-
-		u8 sa, da;
-	} addr;
-
+	struct j1939_addr addr;
 	struct j1939_filter *filters;
 	int nfilters;
 
@@ -104,7 +97,7 @@ static inline bool j1939_no_address(const struct sock *sk)
 {
 	const struct j1939_sock *jsk = j1939_sk(sk);
 
-	return (jsk->addr.sa == J1939_NO_ADDR) && !jsk->addr.src;
+	return (jsk->addr.sa == J1939_NO_ADDR) && !jsk->addr.src_name;
 }
 
 /* matches skb control buffer (addr) with a j1939 filter */
@@ -144,10 +137,10 @@ static void j1939sk_recv_skb(struct sk_buff *oskb, struct j1939_sock *jsk)
 		/* this socket does not take packets from this iface */
 		return;
 	if (!(jsk->state & J1939_SOCK_PROMISC)) {
-		if (jsk->addr.src) {
+		if (jsk->addr.src_name) {
 			/* reject message for other destinations */
 			if (skcb->dstname &&
-			    (skcb->dstname != jsk->addr.src))
+			    (skcb->dstname != jsk->addr.src_name))
 				/* the msg is not destined for the name
 				 * that the socket is bound to
 				 */
@@ -280,7 +273,7 @@ static int j1939sk_bind(struct socket *sock, struct sockaddr *uaddr, int len)
 			goto fail_locked;
 		jsk->ifindex_started = bound_dev_if;
 		priv = j1939_priv_get_by_ifindex(jsk->ifindex_started);
-		j1939_name_local_get(priv, jsk->addr.src);
+		j1939_name_local_get(priv, jsk->addr.src_name);
 		j1939_addr_local_get(priv, jsk->addr.sa);
 		j1939_priv_put(priv);
 	}
@@ -291,13 +284,13 @@ static int j1939sk_bind(struct socket *sock, struct sockaddr *uaddr, int len)
 	if (jsk->ifindex_started) {
 		priv = j1939_priv_get_by_ifindex(jsk->ifindex_started);
 		/* priv should be set when ifindex_started is nonzero */
-		j1939_name_local_put(priv, jsk->addr.src);
+		j1939_name_local_put(priv, jsk->addr.src_name);
 		j1939_name_local_get(priv, addr->can_addr.j1939.name);
 		j1939_addr_local_put(priv, jsk->addr.sa);
 		j1939_addr_local_get(priv, addr->can_addr.j1939.addr);
 		j1939_priv_put(priv);
 	}
-	jsk->addr.src = addr->can_addr.j1939.name;
+	jsk->addr.src_name = addr->can_addr.j1939.name;
 	jsk->addr.sa = addr->can_addr.j1939.addr;
 
 	/* set default transmit pgn */
@@ -370,13 +363,13 @@ static int j1939sk_connect(struct socket *sock, struct sockaddr *uaddr,
 		jsk->ifindex_started = bound_dev_if;
 		/* make sure that this is in sync */
 		priv = j1939_priv_get_by_ifindex(jsk->ifindex_started);
-		j1939_name_local_get(priv, jsk->addr.src);
+		j1939_name_local_get(priv, jsk->addr.src_name);
 		j1939_addr_local_get(priv, jsk->addr.sa);
 		j1939_priv_put(priv);
 	}
 
 	/* lookup destination */
-	jsk->addr.dst = addr->can_addr.j1939.name;
+	jsk->addr.dst_name = addr->can_addr.j1939.name;
 	jsk->addr.da = addr->can_addr.j1939.addr;
 
 	/* start assigning, no problem can occur at this point anymore */
@@ -403,7 +396,7 @@ static void j1939sk_sock2sockaddr_can(struct sockaddr_can *addr,
 {
 	addr->can_family = AF_CAN;
 	addr->can_ifindex = jsk->sk.sk_bound_dev_if;
-	addr->can_addr.j1939.name = peer ? jsk->addr.dst : jsk->addr.src;
+	addr->can_addr.j1939.name = peer ? jsk->addr.dst_name : jsk->addr.src_name;
 	addr->can_addr.j1939.pgn = jsk->addr.pgn;
 	addr->can_addr.j1939.addr = peer ? jsk->addr.da : jsk->addr.sa;
 }
@@ -449,7 +442,7 @@ static int j1939sk_release(struct socket *sock)
 	if (jsk->ifindex_started) {
 		priv = j1939_priv_get_by_ifindex(jsk->ifindex_started);
 		j1939_addr_local_put(priv, jsk->addr.sa);
-		j1939_name_local_put(priv, jsk->addr.src);
+		j1939_name_local_put(priv, jsk->addr.src_name);
 		j1939_priv_put(priv);
 
 		j1939_ifindex_stop(jsk->ifindex_started);
@@ -662,7 +655,7 @@ static int j1939sk_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 	if (!ifindex)
 		return -EBADFD;
 
-	if (jsk->addr.sa == J1939_NO_ADDR && !jsk->addr.src)
+	if (jsk->addr.sa == J1939_NO_ADDR && !jsk->addr.src_name)
 		/* no address assigned yet */
 		return -EBADFD;
 
@@ -703,8 +696,8 @@ static int j1939sk_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 	skcb = j1939_get_cb(skb);
 	memset(skcb, 0, sizeof(*skcb));
 	skcb->msg_flags = msg->msg_flags;
-	skcb->srcname = jsk->addr.src;
-	skcb->dstname = jsk->addr.dst;
+	skcb->srcname = jsk->addr.src_name;
+	skcb->dstname = jsk->addr.dst_name;
 	skcb->pgn = jsk->addr.pgn;
 	skcb->priority = j1939_prio(jsk->sk.sk_priority);
 	skcb->srcaddr = jsk->addr.sa;
