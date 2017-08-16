@@ -182,6 +182,15 @@ struct j1939_ecu *j1939_ecu_find_priv_default_tx(int ifindex, name_t *pname,
 						 u8 *paddr);
 extern struct proc_dir_entry *j1939_procdir;
 
+struct j1939_addr {
+	name_t src_name;
+	name_t dst_name;
+	pgn_t pgn;
+
+	u8 sa;
+	u8 da;
+};
+
 /* control buffer of the sk_buff */
 struct j1939_sk_buff_cb {
 	pgn_t pgn;
