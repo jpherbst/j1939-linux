@@ -402,21 +402,28 @@ static int j1939sk_release(struct socket *sock)
 
 	if (!sk)
 		return 0;
-	lock_sock(sk);
+
 	jsk = j1939_sk(sk);
-	spin_lock_bh(&j1939_socks_lock);
-	list_del_init(&jsk->list);
-	spin_unlock_bh(&j1939_socks_lock);
+	lock_sock(sk);
 
-	if (jsk->ifindex_started) {
-		priv = j1939_priv_get_by_ifindex(jsk->ifindex_started);
-		j1939_addr_local_put(priv, jsk->addr.sa);
-		j1939_name_local_put(priv, jsk->addr.src_name);
-		j1939_priv_put(priv);
+	if (jsk->state & J1939_SOCK_BOUND) {
+		struct net_device *netdev;
 
-		j1939_ifindex_stop(jsk->ifindex_started);
+		spin_lock_bh(&j1939_socks_lock);
+		list_del_init(&jsk->list);
+		spin_unlock_bh(&j1939_socks_lock);
+
+		netdev = dev_get_by_index(&init_net, jsk->sk.sk_bound_dev_if);
+		if (netdev) {
+			priv = j1939_priv_get(netdev);
+			j1939_addr_local_put(priv, jsk->addr.sa);
+			j1939_name_local_put(priv, jsk->addr.src_name);
+			j1939_priv_put(priv);
+
+			j1939_netdev_stop(netdev);
+			dev_put(netdev);
+		}
 	}
-	jsk->ifindex_started = 0;
 
 	sock_orphan(sk);
 	sock->sk = NULL;
