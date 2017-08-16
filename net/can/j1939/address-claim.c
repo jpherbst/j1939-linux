@@ -40,7 +40,7 @@ static inline int ac_msg_is_request_for_ac(struct sk_buff *skb)
 	struct j1939_sk_buff_cb *skcb = j1939_get_cb(skb);
 	int req_pgn;
 
-	if ((skb->len < 3) || (skcb->pgn != PGN_REQUEST))
+	if ((skb->len < 3) || (skcb->addr.pgn != PGN_REQUEST))
 		return 0;
 
 	req_pgn = skb->data[0] | (skb->data[1] << 8) | (skb->data[2] << 16);
@@ -57,18 +57,18 @@ static int j1939_verify_outgoing_address_claim(struct sk_buff *skb)
 		return -EPROTO;
 	}
 
-	if (skcb->srcname != candata_to_name(skb)) {
+	if (skcb->addr.src_name != candata_to_name(skb)) {
 		pr_notice("tx address claim with different name\n");
 		return -EPROTO;
 	}
 
-	if (skcb->srcaddr == J1939_NO_ADDR) {
+	if (skcb->addr.sa == J1939_NO_ADDR) {
 		pr_notice("tx address claim with broadcast sa\n");
 		return -EPROTO;
 	}
 
 	/* ac must always be a broadcast */
-	if (skcb->dstname || (skcb->dstaddr != J1939_NO_ADDR)) {
+	if (skcb->addr.dst_name || (skcb->addr.da != J1939_NO_ADDR)) {
 		pr_notice("tx address claim with dest, not broadcast\n");
 		return -EPROTO;
 	}
@@ -81,43 +81,43 @@ int j1939_fixup_address_claim(struct sk_buff *skb)
 	struct j1939_sk_buff_cb *skcb = j1939_get_cb(skb);
 
 	/* network mgmt: address claiming msgs */
-	if (skcb->pgn == PGN_ADDRESS_CLAIMED) {
+	if (skcb->addr.pgn == PGN_ADDRESS_CLAIMED) {
 		struct j1939_ecu *ecu;
 
 		ret = j1939_verify_outgoing_address_claim(skb);
 		/* return both when failure & when successful */
 		if (ret < 0)
 			return ret;
-		ecu = j1939_ecu_find_by_name(skcb->srcname,
+		ecu = j1939_ecu_find_by_name(skcb->addr.src_name,
 					     skb->dev->ifindex);
 		if (!ecu)
 			return -ENODEV;
 
-		if (ecu->sa != skcb->srcaddr)
+		if (ecu->sa != skcb->addr.sa)
 			/* hold further traffic for ecu, remove from parent */
 			j1939_ecu_remove_sa(ecu);
 		put_j1939_ecu(ecu);
-	} else if (skcb->srcname) {
+	} else if (skcb->addr.src_name) {
 		/* assign source address */
-		sa = j1939_name_to_sa(skcb->srcname, skb->dev->ifindex);
+		sa = j1939_name_to_sa(skcb->addr.src_name, skb->dev->ifindex);
 		if (!j1939_address_is_unicast(sa) &&
 		    !ac_msg_is_request_for_ac(skb)) {
 			pr_notice("tx drop: invalid sa for name 0x%016llx\n",
-				     skcb->srcname);
+				     skcb->addr.src_name);
 			return -EADDRNOTAVAIL;
 		}
-		skcb->srcaddr = sa;
+		skcb->addr.sa = sa;
 	}
 
 	/* assign destination address */
-	if (skcb->dstname) {
-		sa = j1939_name_to_sa(skcb->dstname, skb->dev->ifindex);
+	if (skcb->addr.dst_name) {
+		sa = j1939_name_to_sa(skcb->addr.dst_name, skb->dev->ifindex);
 		if (!j1939_address_is_unicast(sa)) {
 			pr_notice("tx drop: invalid da for name 0x%016llx\n",
-				     skcb->dstname);
+				     skcb->addr.dst_name);
 			return -EADDRNOTAVAIL;
 		}
-		skcb->dstaddr = sa;
+		skcb->addr.da = sa;
 	}
 	return 0;
 }
@@ -135,13 +135,13 @@ static void j1939_process_address_claim(struct sk_buff *skb)
 	}
 
 	name = candata_to_name(skb);
-	skcb->srcname = name;
+	skcb->addr.src_name = name;
 	if (!name) {
 		pr_notice("rx address claim without name\n");
 		return;
 	}
 
-	if (!j1939_address_is_valid(skcb->srcaddr)) {
+	if (!j1939_address_is_valid(skcb->addr.sa)) {
 		pr_notice("rx address claim with broadcast sa\n");
 		return;
 	}
@@ -153,23 +153,23 @@ static void j1939_process_address_claim(struct sk_buff *skb)
 	write_lock_bh(&priv->lock);
 
 	ecu = _j1939_ecu_get_register(priv, name,
-				      j1939_address_is_unicast(skcb->srcaddr));
+				      j1939_address_is_unicast(skcb->addr.sa));
 	if (IS_ERR(ecu))
 		goto done;
 
-	if (skcb->srcaddr >= J1939_IDLE_ADDR) {
+	if (skcb->addr.sa >= J1939_IDLE_ADDR) {
 		_j1939_ecu_unregister(ecu);
 		goto done;
 	}
 
 	/* save new SA */
-	if (skcb->srcaddr != ecu->sa)
+	if (skcb->addr.sa != ecu->sa)
 		_j1939_ecu_remove_sa(ecu);
 	/* cancel pending (previous) address claim */
 	hrtimer_try_to_cancel(&ecu->ac_timer);
-	ecu->sa = skcb->srcaddr;
+	ecu->sa = skcb->addr.sa;
 
-	prev = priv->ents[skcb->srcaddr].ecu;
+	prev = priv->ents[skcb->addr.sa].ecu;
 	if (prev && prev != ecu) {
 		if (ecu->name > prev->name) {
 			_j1939_ecu_unregister(ecu);
@@ -196,22 +196,22 @@ void j1939_recv_address_claim(struct sk_buff *skb, struct j1939_priv *priv)
 	struct j1939_ecu *ecu;
 
 	/* network mgmt */
-	if (skcb->pgn == PGN_ADDRESS_CLAIMED) {
+	if (skcb->addr.pgn == PGN_ADDRESS_CLAIMED) {
 		j1939_process_address_claim(skb);
-	} else if (j1939_address_is_unicast(skcb->srcaddr)) {
-		ecu = j1939_ecu_find_by_addr(skcb->srcaddr, skb->skb_iif);
+	} else if (j1939_address_is_unicast(skcb->addr.sa)) {
+		ecu = j1939_ecu_find_by_addr(skcb->addr.sa, skb->skb_iif);
 		if (ecu) {
 			/* source administration */
 			ecu->rxtime = ktime_get();
-			skcb->srcname = ecu->name;
+			skcb->addr.src_name = ecu->name;
 			put_j1939_ecu(ecu);
 		}
 	}
 
 	/* assign destination stuff */
-	ecu = j1939_ecu_find_by_addr(skcb->dstaddr, skb->skb_iif);
+	ecu = j1939_ecu_find_by_addr(skcb->addr.da, skb->skb_iif);
 	if (ecu) {
-		skcb->dstname = ecu->name;
+		skcb->addr.dst_name = ecu->name;
 		put_j1939_ecu(ecu);
 	}
 }

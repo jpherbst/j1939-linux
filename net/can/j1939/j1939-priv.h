@@ -193,12 +193,8 @@ struct j1939_addr {
 
 /* control buffer of the sk_buff */
 struct j1939_sk_buff_cb {
-	pgn_t pgn;
+	struct j1939_addr addr;
 	priority_t priority;
-	u8 srcaddr;
-	u8 dstaddr;
-	name_t srcname;
-	name_t dstname;
 
 	/* Flags for quick lookups during skb processing
 	 * These are set in the receive path only
@@ -230,7 +226,7 @@ static inline struct j1939_sk_buff_cb *j1939_get_cb(struct sk_buff *skb)
 
 static inline int j1939cb_is_broadcast(const struct j1939_sk_buff_cb *skcb)
 {
-	return (!skcb->dstname && (skcb->dstaddr == 0xff));
+	return (!skcb->addr.dst_name && (skcb->addr.da == 0xff));
 }
 
 int j1939_send(struct sk_buff *);

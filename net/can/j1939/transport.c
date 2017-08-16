@@ -282,31 +282,31 @@ static int j1939tp_match(struct session *session, struct sk_buff *skb,
 	if (session->skb_iif != skb->skb_iif)
 		return 0;
 	if (!reverse) {
-		if (session->cb->srcname) {
-			if (session->cb->srcname != cb->srcname)
+		if (session->cb->addr.src_name) {
+			if (session->cb->addr.src_name != cb->addr.src_name)
 				return 0;
-		} else if (session->cb->srcaddr != cb->srcaddr) {
+		} else if (session->cb->addr.sa != cb->addr.sa) {
 			return 0;
 		}
 
-		if (session->cb->dstname) {
-			if (session->cb->dstname != cb->dstname)
+		if (session->cb->addr.dst_name) {
+			if (session->cb->addr.dst_name != cb->addr.dst_name)
 				return 0;
-		} else if (session->cb->dstaddr != cb->dstaddr) {
+		} else if (session->cb->addr.da != cb->addr.da) {
 			return 0;
 		}
 	} else {
-		if (session->cb->srcname) {
-			if (session->cb->srcname != cb->dstname)
+		if (session->cb->addr.src_name) {
+			if (session->cb->addr.src_name != cb->addr.dst_name)
 				return 0;
-		} else if (session->cb->srcaddr != cb->dstaddr) {
+		} else if (session->cb->addr.sa != cb->addr.da) {
 			return 0;
 		}
 
-		if (session->cb->dstname) {
-			if (session->cb->dstname != cb->srcname)
+		if (session->cb->addr.dst_name) {
+			if (session->cb->addr.dst_name != cb->addr.src_name)
 				return 0;
-		} else if (session->cb->dstaddr != cb->srcaddr) {
+		} else if (session->cb->addr.da != cb->addr.sa) {
 			return 0;
 		}
 	}
@@ -343,8 +343,8 @@ static struct session *j1939tp_find(struct list_head *root,
 
 static void j1939_skbcb_swap(struct j1939_sk_buff_cb *cb)
 {
-	swap(cb->dstname, cb->srcname);
-	swap(cb->dstaddr, cb->srcaddr);
+	swap(cb->addr.dst_name, cb->addr.src_name);
+	swap(cb->addr.da, cb->addr.sa);
 	swap(cb->dstflags, cb->srcflags);
 }
 
@@ -376,7 +376,7 @@ static int j1939tp_tx_dat(struct sk_buff *related, int extd,
 	skb_cb = j1939_get_cb(skb);
 	fix_cb(skb_cb);
 	/* fix pgn */
-	skb_cb->pgn = extd ? etp_pgn_dat : tp_pgn_dat;
+	skb_cb->addr.pgn = extd ? etp_pgn_dat : tp_pgn_dat;
 
 	skdat = skb_put(skb, len);
 	memcpy(skdat, dat, len);
@@ -415,7 +415,7 @@ static int j1939xtp_do_tx_ctl(struct sk_buff *related, int extd,
 	fix_cb(skb_cb);
 	if (swap_src_dst)
 		j1939_skbcb_swap(skb_cb);
-	skb_cb->pgn = extd ? etp_pgn_ctl : tp_pgn_ctl;
+	skb_cb->addr.pgn = extd ? etp_pgn_ctl : tp_pgn_ctl;
 
 	skdat = skb_put(skb, 8);
 	memcpy(skdat, dat, 5);
@@ -430,7 +430,7 @@ static inline int j1939tp_tx_ctl(struct session *session,
 				 int swap_src_dst, const u8 *dat)
 {
 	return j1939xtp_do_tx_ctl(session->skb, session->extd, swap_src_dst,
-				  session->cb->pgn, dat);
+				  session->cb->addr.pgn, dat);
 }
 
 static int j1939xtp_tx_abort(struct sk_buff *related, int extd,
@@ -511,7 +511,7 @@ static void j1939session_cancel(struct session *session, int err)
 			/* do not send aborts on incoming broadcasts */
 			j1939xtp_tx_abort(session->skb, session->extd,
 					  !(session->cb->srcflags & ECU_LOCAL),
-					  err, session->cb->pgn);
+					  err, session->cb->addr.pgn);
 		}
 	}
 	j1939session_drop(session);
@@ -544,7 +544,7 @@ static void _j1939xtp_rx_bad_message(struct sk_buff *skb, int extd)
 
 	pgn = j1939xtp_ctl_to_pgn(skb->data);
 	session = j1939tp_find(sessionq(extd), skb, 0);
-	if (session /*&& (session->cb->pgn == pgn)*/) {
+	if (session /*&& (session->cb->addr.pgn == pgn)*/) {
 		/* do not allow TP control messages on 2 pgn's */
 		j1939session_cancel(session, ABORT_FAULT);
 		put_session(session); /* ~j1939tp_find */
@@ -585,7 +585,7 @@ static void _j1939xtp_rx_abort(struct sk_buff *skb, int extd)
 		 * do not drop session when a transmit session did not
 		 * start yet
 		 */
-	} else if (session->cb->pgn == pgn) {
+	} else if (session->cb->addr.pgn == pgn) {
 		j1939session_drop(session);
 	}
 
@@ -626,7 +626,7 @@ static void j1939xtp_rx_eof(struct sk_buff *skb, int extd)
 		return;
 	}
 
-	if (session->cb->pgn != pgn) {
+	if (session->cb->addr.pgn != pgn) {
 		j1939xtp_tx_abort(skb, extd, 1, ABORT_BUSY, pgn);
 		j1939session_cancel(session, ABORT_BUSY);
 	} else {
@@ -651,7 +651,7 @@ static void j1939xtp_rx_cts(struct sk_buff *skb, int extd)
 		return;
 	}
 
-	if (session->cb->pgn != pgn) {
+	if (session->cb->addr.pgn != pgn) {
 		/* what to do? */
 		j1939xtp_tx_abort(skb, extd, 1, ABORT_BUSY, pgn);
 		j1939session_cancel(session, ABORT_BUSY);
@@ -709,7 +709,7 @@ static void j1939xtp_rx_rts(struct sk_buff *skb, int extd)
 
 	if ((tp_cmd_rts == dat[0]) && j1939cb_is_broadcast(cb)) {
 		pr_alert("%s: rts without destination (%i %02x)\n", __func__,
-			 skb->skb_iif, cb->srcaddr);
+			 skb->skb_iif, cb->addr.sa);
 		return;
 	}
 
@@ -720,19 +720,19 @@ static void j1939xtp_rx_rts(struct sk_buff *skb, int extd)
 	if (session && !j1939tp_im_transmitter(skb)) {
 		/* RTS on pending connection */
 		j1939session_cancel(session, ABORT_BUSY);
-		if ((pgn != session->cb->pgn) && (tp_cmd_bam != dat[0]))
+		if ((pgn != session->cb->addr.pgn) && (tp_cmd_bam != dat[0]))
 			j1939xtp_tx_abort(skb, extd, 1, ABORT_BUSY, pgn);
 		put_session(session); /* ~j1939tp_find */
 		return;
 	} else if (!session && j1939tp_im_transmitter(skb)) {
 		pr_alert("%s: I should tx (%i %02x %02x)\n", __func__,
-			 skb->skb_iif, cb->srcaddr, cb->dstaddr);
+			 skb->skb_iif, cb->addr.sa, cb->addr.da);
 		return;
 	}
 	if (session && (session->last_cmd != 0)) {
 		/* we received a second rts on the same connection */
 		pr_alert("%s: connection exists (%i %02x %02x)\n", __func__,
-			 skb->skb_iif, cb->srcaddr, cb->dstaddr);
+			 skb->skb_iif, cb->addr.sa, cb->addr.da);
 		j1939session_cancel(session, ABORT_BUSY);
 		put_session(session); /* ~j1939tp_find */
 		return;
@@ -742,8 +742,8 @@ static void j1939xtp_rx_rts(struct sk_buff *skb, int extd)
 		 * They may be 'not filled in yet' for sending
 		 * skb's, since they did not pass the Address Claim ever.
 		 */
-		session->cb->srcaddr = cb->srcaddr;
-		session->cb->dstaddr = cb->dstaddr;
+		session->cb->addr.sa = cb->addr.sa;
+		session->cb->addr.da = cb->addr.da;
 	} else {
 		int abort = 0;
 
@@ -821,7 +821,7 @@ static void j1939xtp_rx_dpo(struct sk_buff *skb, int extd)
 		return;
 	}
 
-	if (session->cb->pgn != pgn) {
+	if (session->cb->addr.pgn != pgn) {
 		pr_info("%s: different pgn\n", __func__);
 		j1939xtp_tx_abort(skb, 1, 1, ABORT_BUSY, pgn);
 		j1939session_cancel(session, ABORT_BUSY);
@@ -1143,8 +1143,8 @@ int j1939_send_transport(struct sk_buff *skb)
 	int ret;
 	struct j1939_priv *priv;
 
-	if ((tp_pgn_dat == cb->pgn) || (tp_pgn_ctl == cb->pgn) ||
-	    (etp_pgn_dat == cb->pgn) || (etp_pgn_ctl == cb->pgn))
+	if ((tp_pgn_dat == cb->addr.pgn) || (tp_pgn_ctl == cb->addr.pgn) ||
+	    (etp_pgn_dat == cb->addr.pgn) || (etp_pgn_ctl == cb->addr.pgn))
 		/* avoid conflict */
 		return -EDOM;
 	else if ((skb->len > MAX_ETP_PACKET_SIZE) ||
@@ -1165,9 +1165,9 @@ int j1939_send_transport(struct sk_buff *skb)
 	priv = j1939_priv_get_by_ifindex(can_skb_prv(skb)->ifindex);
 	if (!priv)
 		return -EINVAL;
-	if (!j1939_address_is_valid(cb->dstaddr) ||
-	    (j1939_address_is_unicast(cb->dstaddr) &&
-	     priv->ents[cb->dstaddr].nusers))
+	if (!j1939_address_is_valid(cb->addr.da) ||
+	    (j1939_address_is_unicast(cb->addr.da) &&
+	     priv->ents[cb->addr.da].nusers))
 		cb->dstflags |= ECU_LOCAL;
 	j1939_priv_put(priv);
 	/* src is always local, I'm sending ... */
@@ -1218,7 +1218,7 @@ int j1939_recv_transport(struct sk_buff *skb)
 	struct j1939_sk_buff_cb *cb = j1939_get_cb(skb);
 	const u8 *dat;
 
-	switch (cb->pgn) {
+	switch (cb->addr.pgn) {
 	case etp_pgn_dat:
 		j1939xtp_rx_dat(skb, EXTENDED);
 		break;
@@ -1302,7 +1302,7 @@ static struct session *j1939session_fresh_new(int size,
 	cb = j1939_get_cb(skb);
 	memcpy(cb, rel_skb->cb, sizeof(*cb));
 	fix_cb(cb);
-	cb->pgn = pgn;
+	cb->addr.pgn = pgn;
 
 	session = j1939session_new(skb);
 	if (!session) {
@@ -1364,17 +1364,17 @@ static int j1939tp_proc_show_session(struct seq_file *sqf,
 				     struct session *session)
 {
 	seq_printf(sqf, "%i", session->skb_iif);
-	if (session->cb->srcname)
-		seq_printf(sqf, "\t%016llx", session->cb->srcname);
+	if (session->cb->addr.src_name)
+		seq_printf(sqf, "\t%016llx", session->cb->addr.src_name);
 	else
-		seq_printf(sqf, "\t%02x", session->cb->srcaddr);
-	if (session->cb->dstname)
-		seq_printf(sqf, "\t%016llx", session->cb->dstname);
-	else if (j1939_address_is_unicast(session->cb->dstaddr))
-		seq_printf(sqf, "\t%02x", session->cb->dstaddr);
+		seq_printf(sqf, "\t%02x", session->cb->addr.sa);
+	if (session->cb->addr.dst_name)
+		seq_printf(sqf, "\t%016llx", session->cb->addr.dst_name);
+	else if (j1939_address_is_unicast(session->cb->addr.da))
+		seq_printf(sqf, "\t%02x", session->cb->addr.da);
 	else
 		seq_puts(sqf, "\t-");
-	seq_printf(sqf, "\t%05x\t%u/%u\n", session->cb->pgn,
+	seq_printf(sqf, "\t%05x\t%u/%u\n", session->cb->addr.pgn,
 		   session->pkt.done * 7, session->skb->len);
 	return 0;
 }
