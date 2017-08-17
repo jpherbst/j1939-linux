@@ -670,7 +670,7 @@ static int j1939sk_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 		goto free_skb;
 	}
 
-	if (skcb->msg_flags & J1939_MSG_SYNC) {
+	if (skcb->msg_flags & MSG_SYN) {
 		if (skcb->msg_flags & MSG_DONTWAIT) {
 			ret = j1939_sock_pending_add_first(&jsk->sk);
 			if (ret > 0)

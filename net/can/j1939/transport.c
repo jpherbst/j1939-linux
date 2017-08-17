@@ -121,7 +121,7 @@ static DECLARE_WAIT_QUEUE_HEAD(tp_wait);
 /* helpers */
 static inline void fix_cb(struct j1939_sk_buff_cb *cb)
 {
-	cb->msg_flags &= ~J1939_MSG_RESERVED;
+	cb->msg_flags &= ~MSG_SYN;
 }
 
 static inline struct list_head *sessionq(int extd)

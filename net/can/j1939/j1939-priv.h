@@ -221,9 +221,6 @@ static inline struct j1939_sk_buff_cb *j1939_get_cb(struct sk_buff *skb)
 	return (struct j1939_sk_buff_cb *)skb->cb;
 }
 
-#define J1939_MSG_RESERVED MSG_SYN
-#define J1939_MSG_SYNC MSG_SYN
-
 static inline int j1939cb_is_broadcast(const struct j1939_sk_buff_cb *skcb)
 {
 	return (!skcb->addr.dst_name && (skcb->addr.da == 0xff));
