@@ -175,7 +175,7 @@ static inline void j1939_ecu_remove_sa(struct j1939_ecu *ecu)
 }
 
 int j1939_name_to_sa(name_t name, int ifindex);
-struct j1939_ecu *j1939_ecu_find_by_addr(int sa, int ifindex);
+struct j1939_ecu *j1939_ecu_find_by_addr(u8 sa, int ifindex);
 struct j1939_ecu *j1939_ecu_find_by_name(name_t name, int ifindex);
 /* find_by_name, with kref & read_lock taken */
 struct j1939_ecu *j1939_ecu_find_priv_default_tx(int ifindex, name_t *pname,
