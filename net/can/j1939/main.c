@@ -101,11 +101,11 @@ static void j1939_can_recv(struct sk_buff *iskb, void *data)
 	read_lock_bh(&priv->lock);
 	if (j1939_address_is_unicast(skcb->addr.sa) &&
 	    priv->ents[skcb->addr.sa].nusers)
-		skcb->srcflags |= ECU_LOCAL;
+		skcb->src_flags |= ECU_LOCAL;
 	if (j1939_address_is_valid(skcb->addr.da) ||
 	    (j1939_address_is_unicast(skcb->addr.da) &&
 	     priv->ents[skcb->addr.da].nusers))
-		skcb->dstflags |= ECU_LOCAL;
+		skcb->dst_flags |= ECU_LOCAL;
 	read_unlock_bh(&priv->lock);
 
 	/* deliver into the j1939 stack ... */
