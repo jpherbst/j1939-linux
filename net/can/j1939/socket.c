@@ -335,9 +335,14 @@ static void j1939sk_sock2sockaddr_can(struct sockaddr_can *addr,
 {
 	addr->can_family = AF_CAN;
 	addr->can_ifindex = jsk->sk.sk_bound_dev_if;
-	addr->can_addr.j1939.name = peer ? jsk->addr.dst_name : jsk->addr.src_name;
 	addr->can_addr.j1939.pgn = jsk->addr.pgn;
-	addr->can_addr.j1939.addr = peer ? jsk->addr.da : jsk->addr.sa;
+	if (peer) {
+		addr->can_addr.j1939.name = jsk->addr.dst_name;
+		addr->can_addr.j1939.addr = jsk->addr.da;
+	} else {
+		addr->can_addr.j1939.name = jsk->addr.src_name;
+		addr->can_addr.j1939.addr = jsk->addr.sa;
+	}
 }
 
 static int j1939sk_getname(struct socket *sock, struct sockaddr *uaddr,
