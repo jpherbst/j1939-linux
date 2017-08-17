@@ -214,6 +214,7 @@ void j1939_name_local_get(struct j1939_priv *priv, name_t name)
 
 	write_lock_bh(&priv->lock);
 	ecu = _j1939_ecu_get_register(priv, name, 1);
+	/* TODO: do proper error handling and pass error down the callstack */
 	if (!IS_ERR(ecu)) {
 		get_j1939_ecu(ecu);
 		++ecu->nusers;
