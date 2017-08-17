@@ -52,7 +52,7 @@ void put_j1939_ecu(struct j1939_ecu *ecu)
 }
 
 struct j1939_ecu *_j1939_ecu_get_register(struct j1939_priv *priv, name_t name,
-					  int create_if_necessary)
+					  bool create_if_necessary)
 {
 	struct j1939_ecu *ecu, *dut;
 
@@ -213,7 +213,7 @@ void j1939_name_local_get(struct j1939_priv *priv, name_t name)
 		return;
 
 	write_lock_bh(&priv->lock);
-	ecu = _j1939_ecu_get_register(priv, name, 1);
+	ecu = _j1939_ecu_get_register(priv, name, true);
 	/* TODO: do proper error handling and pass error down the callstack */
 	if (!IS_ERR(ecu)) {
 		get_j1939_ecu(ecu);
@@ -233,7 +233,7 @@ void j1939_name_local_put(struct j1939_priv *priv, name_t name)
 		return;
 
 	write_lock_bh(&priv->lock);
-	ecu = _j1939_ecu_get_register(priv, name, 0);
+	ecu = _j1939_ecu_get_register(priv, name, false);
 	if (!IS_ERR(ecu)) {
 		--ecu->nusers;
 		if (priv->ents[ecu->sa].ecu == ecu)

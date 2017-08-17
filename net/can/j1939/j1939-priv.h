@@ -242,7 +242,7 @@ void j1939_recv_address_claim(struct sk_buff *, struct j1939_priv *priv);
  * when a matching ecu already exists, then that is returned
  */
 struct j1939_ecu *_j1939_ecu_get_register(struct j1939_priv *priv,
-					  name_t name, int create_if_necessary);
+					  name_t name, bool create_if_necessary);
 
 /* unregister must be called with lock held */
 void _j1939_ecu_unregister(struct j1939_ecu *);
