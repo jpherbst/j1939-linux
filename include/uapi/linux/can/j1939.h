@@ -78,18 +78,4 @@ struct j1939_filter {
 
 #define J1939_FILTER_MAX 512 /* maximum number of j1939_filter set via setsockopt() */
 
-/* RTNETLINK */
-enum {
-	IFLA_J1939_UNSPEC,
-	IFLA_J1939_ENABLE,
-	IFLA_J1939_MAX,
-};
-
-enum {
-	IFA_J1939_UNSPEC,
-	IFA_J1939_ADDR,
-	IFA_J1939_NAME,
-	IFA_J1939_MAX,
-};
-
 #endif /* !_UAPI_CAN_J1939_H_ */
