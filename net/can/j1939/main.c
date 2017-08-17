@@ -206,9 +206,6 @@ int j1939_netdev_start(struct net_device *netdev)
 	struct j1939_priv *priv;
 	struct can_ml_priv *can_ml_priv;
 
-	if (netdev->type != ARPHRD_CAN)
-		return -EAFNOSUPPORT;
-
 	mutex_lock(&j1939_netdev_lock);
 	can_ml_priv = netdev->ml_priv;
 	priv = can_ml_priv->j1939_priv;
