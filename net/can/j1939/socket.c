@@ -646,13 +646,9 @@ static int j1939sk_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 
 	skcb = j1939_get_cb(skb);
 	memset(skcb, 0, sizeof(*skcb));
+	skcb->addr = jsk->addr;
+	skcb->priority = j1939_prio(sk->sk_priority);
 	skcb->msg_flags = msg->msg_flags;
-	skcb->addr.src_name = jsk->addr.src_name;
-	skcb->addr.dst_name = jsk->addr.dst_name;
-	skcb->addr.pgn = jsk->addr.pgn;
-	skcb->priority = j1939_prio(jsk->sk.sk_priority);
-	skcb->addr.sa = jsk->addr.sa;
-	skcb->addr.da = jsk->addr.da;
 
 	if (msg->msg_name) {
 		struct sockaddr_can *addr = msg->msg_name;
