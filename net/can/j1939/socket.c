@@ -240,81 +240,80 @@ static int j1939sk_bind(struct socket *sock, struct sockaddr *uaddr, int len)
 {
 	struct sockaddr_can *addr = (struct sockaddr_can *)uaddr;
 	struct j1939_sock *jsk = j1939_sk(sock->sk);
-	int ret, bound_dev_if;
+	struct net_device *netdev;
 	struct j1939_priv *priv;
+	int ret = 0;
 
+	if (!uaddr)
+		return -EDESTADDRREQ;
 	if (len < J1939_MIN_NAMELEN)
 		return -EINVAL;
 	if (addr->can_family != AF_CAN)
 		return -EINVAL;
+	if (!addr->can_ifindex)
+		return -ENODEV;
 
 	lock_sock(sock->sk);
 
-	/* bind to device ... */
-	bound_dev_if = jsk->sk.sk_bound_dev_if;
-	/* copy netdev info */
-	if (!bound_dev_if && addr->can_ifindex) {
-		bound_dev_if = addr->can_ifindex;
-	} else if (bound_dev_if && addr->can_ifindex) {
-		/* do netdev */
-		if (bound_dev_if != addr->can_ifindex) {
-			ret = -EBUSY;
-			goto fail_locked;
-		}
-	}
-	/* start j1939 */
-	if (bound_dev_if && bound_dev_if != jsk->ifindex_started) {
-		if (jsk->ifindex_started) {
-			ret = -EBUSY;
-			goto fail_locked;
-		}
-		ret = j1939_ifindex_start(bound_dev_if);
-		if (ret < 0)
-			goto fail_locked;
-		jsk->ifindex_started = bound_dev_if;
-		priv = j1939_priv_get_by_ifindex(jsk->ifindex_started);
-		j1939_name_local_get(priv, jsk->addr.src_name);
-		j1939_addr_local_get(priv, jsk->addr.sa);
-		j1939_priv_put(priv);
+	netdev = dev_get_by_index(&init_net, addr->can_ifindex);
+	if (!netdev) {
+		ret = -ENODEV;
+		goto out_release_sock;
 	}
 
-	jsk->sk.sk_bound_dev_if = bound_dev_if;
+	/* Already bound to an interface? */
+	if (jsk->state & J1939_SOCK_BOUND) {
+		/* A re-bind() to a different interface is not
+		 * supported.
+		 */
+		if (jsk->sk.sk_bound_dev_if != addr->can_ifindex) {
+			ret = -EINVAL;
+			goto out_dev_put;
+		}
 
-	/* set addr + name */
-	if (jsk->ifindex_started) {
-		priv = j1939_priv_get_by_ifindex(jsk->ifindex_started);
-		/* priv should be set when ifindex_started is nonzero */
+		/* drop old references */
+		priv = j1939_priv_get(netdev);
 		j1939_name_local_put(priv, jsk->addr.src_name);
-		j1939_name_local_get(priv, addr->can_addr.j1939.name);
 		j1939_addr_local_put(priv, jsk->addr.sa);
-		j1939_addr_local_get(priv, addr->can_addr.j1939.addr);
-		j1939_priv_put(priv);
+	} else {
+		if (netdev->type != ARPHRD_CAN) {
+			ret = -ENODEV;
+			goto out_dev_put;
+		}
+
+		ret = j1939_netdev_start(netdev);
+		if (ret < 0)
+			goto out_dev_put;
+
+		jsk->sk.sk_bound_dev_if = addr->can_ifindex;
+		jsk->ifindex_started = addr->can_ifindex;	/* TODO: remove */
+		priv = j1939_priv_get(netdev);
 	}
-	jsk->addr.src_name = addr->can_addr.j1939.name;
-	jsk->addr.sa = addr->can_addr.j1939.addr;
 
 	/* set default transmit pgn */
 	if (pgn_is_valid(addr->can_addr.j1939.pgn))
 		jsk->addr.pgn = addr->can_addr.j1939.pgn;
+	jsk->addr.src_name = addr->can_addr.j1939.name;
+	jsk->addr.sa = addr->can_addr.j1939.addr;
 
-	if (!(jsk->state & (J1939_SOCK_BOUND | J1939_SOCK_CONNECTED))) {
+	/* get new references */
+	j1939_name_local_get(priv, jsk->addr.src_name);
+	j1939_addr_local_get(priv, jsk->addr.sa);
+	j1939_priv_put(priv);
+
+	if (!(jsk->state & J1939_SOCK_BOUND)) {
 		spin_lock_bh(&j1939_socks_lock);
 		list_add_tail(&jsk->list, &j1939_socks);
 		spin_unlock_bh(&j1939_socks_lock);
-	}
-	jsk->state |= J1939_SOCK_BOUND;
 
-	ret = 0;
-
- fail_locked:
-	if (!jsk->sk.sk_bound_dev_if && jsk->ifindex_started) {
-		/* started j1939 on this netdev during this call,
-		 * so we revert that
-		 */
-		j1939_ifindex_stop(jsk->ifindex_started);
-		jsk->ifindex_started = 0;
+		jsk->state |= J1939_SOCK_BOUND;
 	}
+
+ out_dev_put:	/* fallthrough */
+	dev_put(netdev);
+ out_release_sock:
 	release_sock(sock->sk);
+
 	return ret;
 }
 
