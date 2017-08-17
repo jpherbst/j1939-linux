@@ -41,8 +41,6 @@ struct j1939_sock {
 #define J1939_SOCK_PROMISC BIT(2)
 #define J1939_SOCK_RECV_OWN BIT(3)
 
-	int ifindex_started; /* ifindex of netdev */
-
 	struct j1939_addr addr;
 	struct j1939_filter *filters;
 	int nfilters;
@@ -256,7 +254,6 @@ static int j1939sk_bind(struct socket *sock, struct sockaddr *uaddr, int len)
 			goto out_dev_put;
 
 		jsk->sk.sk_bound_dev_if = addr->can_ifindex;
-		jsk->ifindex_started = addr->can_ifindex;	/* TODO: remove */
 		priv = j1939_priv_get(netdev);
 	}
 
@@ -602,9 +599,7 @@ static int j1939sk_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 	if (!(jsk->state & J1939_SOCK_BOUND))
 		return -EBADFD;
 
-	ifindex = jsk->ifindex_started;
-	if (!ifindex)
-		return -EBADFD;
+	ifindex = sk->sk_bound_dev_if;
 
 	if (jsk->addr.sa == J1939_NO_ADDR && !jsk->addr.src_name)
 		/* no address assigned yet */
