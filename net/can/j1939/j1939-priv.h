@@ -118,7 +118,7 @@ void j1939_name_local_put(struct j1939_priv *priv, name_t name);
 /* conversion function between (struct sock | struct sk_buff)->sk_priority
  * from linux and j1939 priority field
  */
-static inline int j1939_prio(int sk_priority)
+static inline priority_t j1939_prio(int sk_priority)
 {
 	if (sk_priority < 0)
 		return 6; /* default */
