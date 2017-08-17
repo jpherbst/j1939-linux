@@ -206,36 +206,6 @@ static int j1939sk_init(struct sock *sk)
 	return 0;
 }
 
-/* helper: return <0 for error, >0 for error to notify */
-static int j1939_ifindex_start(int ifindex)
-{
-	int ret;
-	struct net_device *netdev;
-
-	netdev = dev_get_by_index(&init_net, ifindex);
-	if (!netdev)
-		return -ENODEV;
-
-	/* no need to test for CAN device,
-	 * done by j1939_netdev_start
-	 */
-	ret = j1939_netdev_start(netdev);
-
-	dev_put(netdev);
-	return ret;
-}
-
-static void j1939_ifindex_stop(int ifindex)
-{
-	struct net_device *netdev;
-
-	netdev = dev_get_by_index(&init_net, ifindex);
-	if (netdev) {
-		j1939_netdev_stop(netdev);
-		dev_put(netdev);
-	}
-}
-
 static int j1939sk_bind(struct socket *sock, struct sockaddr *uaddr, int len)
 {
 	struct sockaddr_can *addr = (struct sockaddr_can *)uaddr;
