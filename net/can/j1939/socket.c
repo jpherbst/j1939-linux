@@ -320,72 +320,42 @@ static int j1939sk_bind(struct socket *sock, struct sockaddr *uaddr, int len)
 static int j1939sk_connect(struct socket *sock, struct sockaddr *uaddr,
 			   int len, int flags)
 {
-	int ret;
 	struct sockaddr_can *addr = (struct sockaddr_can *)uaddr;
 	struct j1939_sock *jsk = j1939_sk(sock->sk);
-	struct j1939_priv *priv;
-	int bound_dev_if;
+	int ret = 0;
 
 	if (!uaddr)
 		return -EDESTADDRREQ;
-
 	if (len < J1939_MIN_NAMELEN)
 		return -EINVAL;
 	if (addr->can_family != AF_CAN)
 		return -EINVAL;
+	if (!addr->can_ifindex)
+		return -ENODEV;
 
 	lock_sock(sock->sk);
 
-	/* bind to device ... */
-	bound_dev_if = jsk->sk.sk_bound_dev_if;
-
-	/* copy netdev info */
-	if (!bound_dev_if && addr->can_ifindex) {
-		bound_dev_if = addr->can_ifindex;
-	} else if (bound_dev_if && addr->can_ifindex) {
-		/* do netdev */
-		if (bound_dev_if != addr->can_ifindex) {
-			ret = -EBUSY;
-			goto fail_locked;
-		}
+	/* bind() before connect() is mandatory */
+	if (!(jsk->state & J1939_SOCK_BOUND)) {
+		ret = -EINVAL;
+		goto out_release_sock;
 	}
 
-	/* start j1939 */
-	if (bound_dev_if && bound_dev_if != jsk->ifindex_started) {
-		if (jsk->ifindex_started) {
-			ret = -EBUSY;
-			goto fail_locked;
-		}
-		ret = j1939_ifindex_start(bound_dev_if);
-		if (ret < 0)
-			goto fail_locked;
-		jsk->ifindex_started = bound_dev_if;
-		/* make sure that this is in sync */
-		priv = j1939_priv_get_by_ifindex(jsk->ifindex_started);
-		j1939_name_local_get(priv, jsk->addr.src_name);
-		j1939_addr_local_get(priv, jsk->addr.sa);
-		j1939_priv_put(priv);
+	/* A re-connect() is not supported */
+	if (!(jsk->state & J1939_SOCK_CONNECTED)) {
+		ret = -EBUSY;
+		goto out_release_sock;
 	}
 
-	/* lookup destination */
 	jsk->addr.dst_name = addr->can_addr.j1939.name;
 	jsk->addr.da = addr->can_addr.j1939.addr;
-
-	/* start assigning, no problem can occur at this point anymore */
-	jsk->sk.sk_bound_dev_if = bound_dev_if;
 
 	if (pgn_is_valid(addr->can_addr.j1939.pgn))
 		jsk->addr.pgn = addr->can_addr.j1939.pgn;
 
-	if (!(jsk->state & (J1939_SOCK_BOUND | J1939_SOCK_CONNECTED))) {
-		spin_lock_bh(&j1939_socks_lock);
-		list_add_tail(&jsk->list, &j1939_socks);
-		spin_unlock_bh(&j1939_socks_lock);
-	}
 	jsk->state |= J1939_SOCK_CONNECTED;
-	ret = 0;
 
- fail_locked:
+ out_release_sock: /* fallthrough */
 	release_sock(sock->sk);
 	return ret;
 }
