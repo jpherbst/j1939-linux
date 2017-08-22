@@ -611,6 +611,7 @@ static int j1939sk_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 			return -EINVAL;
 		if (addr->can_family != AF_CAN)
 			return -EINVAL;
+		/* TODO: always check if ifindex is correct? */
 		if (addr->can_ifindex && (ifindex != addr->can_ifindex))
 			return -EBADFD;
 	}

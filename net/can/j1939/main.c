@@ -216,6 +216,7 @@ int j1939_netdev_start(struct net_device *netdev)
 	if (!priv)
 		return -ENOMEM;
 
+	/* TODO: use tasklet_hrtimer_init() instead */
 	tasklet_init(&priv->ac_task, j1939_priv_ac_task, (unsigned long)priv);
 	rwlock_init(&priv->lock);
 	INIT_LIST_HEAD(&priv->ecus);

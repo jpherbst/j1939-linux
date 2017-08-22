@@ -72,7 +72,7 @@ struct j1939_priv {
 	/* segments need a lock to protect the above list */
 	rwlock_t lock;
 
-	int ifindex;
+	int ifindex;			/* TODO: redundant with netdev? */
 	struct net_device *netdev;
 
 	/* list of 256 ecu ptrs, that cache the claimed addresses.
