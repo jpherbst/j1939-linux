@@ -102,7 +102,6 @@ struct j1939_priv {
 };
 
 void put_j1939_ecu(struct j1939_ecu *ecu);
-void j1939_priv_put(struct j1939_priv *segment);
 
 static inline void get_j1939_ecu(struct j1939_ecu *dut)
 {
@@ -250,36 +249,28 @@ void _j1939_ecu_unregister(struct j1939_ecu *);
 int j1939_netdev_start(struct net_device *);
 void j1939_netdev_stop(struct net_device *);
 
-static inline struct j1939_priv *j1939_priv_get(struct net_device *dev)
+void __j1939_priv_release(struct kref *kref);
+struct j1939_priv *j1939_priv_get(struct net_device *dev);
+struct j1939_priv *j1939_priv_get_by_ifindex(int ifindex);
+
+
+static inline void j1939_priv_set(struct net_device *dev, struct j1939_priv *priv)
 {
-	struct can_ml_priv *can_ml_priv;
-	struct j1939_priv *priv;
+	struct can_ml_priv *can_ml_priv = dev->ml_priv;
 
-	if (dev->type != ARPHRD_CAN)
-		return NULL;
-
-	can_ml_priv = dev->ml_priv;
-	priv = can_ml_priv->j1939_priv;
-
-	if (priv)
-		kref_get(&priv->kref);
-
-	return priv;
+	can_ml_priv->j1939_priv = priv;
 }
 
-static inline struct j1939_priv *j1939_priv_get_by_ifindex(int ifindex)
+static inline struct j1939_priv *__j1939_priv_get(struct net_device *dev)
 {
-	struct j1939_priv *priv;
-	struct net_device *netdev;
+	struct can_ml_priv *can_ml_priv = dev->ml_priv;
 
-	netdev = dev_get_by_index(&init_net, ifindex);
-	if (!netdev)
-		return NULL;
+	return can_ml_priv->j1939_priv;
+}
 
-	priv = j1939_priv_get(netdev);
-	dev_put(netdev);
-
-	return priv;
+static inline void j1939_priv_put(struct j1939_priv *priv)
+{
+	kref_put(&priv->kref, __j1939_priv_release);
 }
 
 /* notify/alert all j1939 sockets bound to ifindex */

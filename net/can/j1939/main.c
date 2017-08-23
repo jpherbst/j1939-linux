@@ -281,7 +281,7 @@ void j1939_netdev_stop(struct net_device *netdev)
 }
 
 /* device interface */
-static void on_put_j1939_priv(struct kref *kref)
+void __j1939_priv_release(struct kref *kref)
 {
 	struct j1939_priv *priv = container_of(kref, struct j1939_priv, kref);
 	struct j1939_ecu *ecu;
@@ -298,9 +298,35 @@ static void on_put_j1939_priv(struct kref *kref)
 	kfree(priv);
 }
 
-void j1939_priv_put(struct j1939_priv *segment)
+struct j1939_priv *j1939_priv_get(struct net_device *dev)
 {
-	kref_put(&segment->kref, on_put_j1939_priv);
+	struct j1939_priv *priv;
+
+	if (dev->type != ARPHRD_CAN)
+		return NULL;
+
+	priv = __j1939_priv_get(dev);
+	if (priv)
+		kref_get(&priv->kref);
+
+	return priv;
+}
+
+struct j1939_priv *j1939_priv_get_by_ifindex(int ifindex)
+{
+	struct j1939_priv *priv;
+	struct net_device *netdev;
+
+	printk("%s: ifindex=%d\n", __func__, ifindex);
+
+	netdev = dev_get_by_index(&init_net, ifindex);
+	if (!netdev)
+		return NULL;
+
+	priv = j1939_priv_get(netdev);
+	dev_put(netdev);
+
+	return priv;
 }
 
 static int j1939_netdev_notify(struct notifier_block *nb,
