@@ -198,86 +198,68 @@ static void j1939_priv_ac_task(unsigned long val)
 #define J1939_CAN_ID CAN_EFF_FLAG
 #define J1939_CAN_MASK (CAN_EFF_FLAG | CAN_RTR_FLAG)
 
-static DEFINE_MUTEX(j1939_netdev_lock);
+static DEFINE_SPINLOCK(j1939_netdev_lock);
 
 int j1939_netdev_start(struct net_device *netdev)
 {
-	int ret;
 	struct j1939_priv *priv;
-	struct can_ml_priv *can_ml_priv;
+	int ret;
 
-	mutex_lock(&j1939_netdev_lock);
-	can_ml_priv = netdev->ml_priv;
-	priv = can_ml_priv->j1939_priv;
-	if (priv) {
-		++priv->nusers;
-		goto done;
-	}
+	spin_lock(&j1939_netdev_lock);
+	priv = j1939_priv_get(netdev);
+	spin_unlock(&j1939_netdev_lock);
+	if (priv)
+		return 0;
 
-	/* create/stuff j1939_priv */
+	/* create j1939_priv */
 	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
-	if (!priv) {
-		ret = -ENOMEM;
-		goto fail_mem;
-	}
+	if (!priv)
+		return -ENOMEM;
+
 	tasklet_init(&priv->ac_task, j1939_priv_ac_task, (unsigned long)priv);
 	rwlock_init(&priv->lock);
 	INIT_LIST_HEAD(&priv->ecus);
 	priv->netdev = netdev;
 	priv->ifindex = netdev->ifindex;
 	kref_init(&priv->kref);
-	priv->nusers = 1;
+	dev_hold(netdev);
 
 	/* add CAN handler */
 	ret = can_rx_register(&init_net, netdev, J1939_CAN_ID, J1939_CAN_MASK,
 			      j1939_can_recv, priv, "j1939", NULL);
 	if (ret < 0)
-		goto fail_can;
+		goto out_dev_put;
 
-	can_ml_priv->j1939_priv = priv;
-	dev_hold(netdev);
- done:
-	mutex_unlock(&j1939_netdev_lock);
+	spin_lock(&j1939_netdev_lock);
+	if (j1939_priv_get(netdev)) {
+		/* Someone was faster than us, use their priv and roll
+		 * back our's. */
+		spin_unlock(&j1939_netdev_lock);
+		goto out_rx_unregister;
+	}
+	j1939_priv_set(netdev, priv);
+	spin_unlock(&j1939_netdev_lock);
+
 	return 0;
 
- fail_can:
+ out_rx_unregister:
+	can_rx_unregister(&init_net, netdev, J1939_CAN_ID, J1939_CAN_MASK,
+			  j1939_can_recv, priv);
+ out_dev_put:
+	dev_put(netdev);
 	kfree(priv);
- fail_mem:
-	mutex_unlock(&j1939_netdev_lock);
+
 	return ret;
 }
 
 void j1939_netdev_stop(struct net_device *netdev)
 {
-	struct can_ml_priv *can_ml_priv;
 	struct j1939_priv *priv;
 
-	if (netdev->type != ARPHRD_CAN)
-		return;
-	can_ml_priv = netdev->ml_priv;
-
-	mutex_lock(&j1939_netdev_lock);
-	priv = can_ml_priv->j1939_priv;
-	--priv->nusers;
-	if (priv->nusers) {
-		mutex_unlock(&j1939_netdev_lock);
-		return;
-	}
-	/* no users left, start breakdown */
-
-	/* unlink from netdev */
-	can_ml_priv->j1939_priv = NULL;
-	mutex_unlock(&j1939_netdev_lock);
-
-	can_rx_unregister(&init_net, netdev, J1939_CAN_ID, J1939_CAN_MASK,
-			  j1939_can_recv, priv);
-
-	/* remove pending transport protocol sessions */
-	j1939tp_rmdev_notifier(netdev);
-
-	/* final put */
+	spin_lock(&j1939_netdev_lock);
+	priv = __j1939_priv_get(netdev);
 	j1939_priv_put(priv);
-	dev_put(netdev);
+	spin_unlock(&j1939_netdev_lock);
 }
 
 /* device interface */
@@ -286,15 +268,27 @@ void __j1939_priv_release(struct kref *kref)
 	struct j1939_priv *priv = container_of(kref, struct j1939_priv, kref);
 	struct j1939_ecu *ecu;
 
+	can_rx_unregister(&init_net, priv->netdev, J1939_CAN_ID, J1939_CAN_MASK,
+			  j1939_can_recv, priv);
+
 	tasklet_disable_nosync(&priv->ac_task);
+
+	/* remove pending transport protocol sessions */
+	j1939tp_rmdev_notifier(priv->netdev);
 
 	/* cleanup priv */
 	write_lock_bh(&priv->lock);
+	/* TODO: list_for_each() */
 	while (!list_empty(&priv->ecus)) {
 		ecu = list_first_entry(&priv->ecus, struct j1939_ecu, list);
 		_j1939_ecu_unregister(ecu);
 	}
 	write_unlock_bh(&priv->lock);
+
+	/* unlink from netdev */
+	j1939_priv_set(priv->netdev, NULL);
+
+	dev_put(priv->netdev);
 	kfree(priv);
 }
 

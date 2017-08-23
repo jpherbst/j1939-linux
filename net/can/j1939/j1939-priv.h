@@ -94,11 +94,6 @@ struct j1939_priv {
 	struct tasklet_struct ac_task;
 
 	struct kref kref;
-
-	/* ref counter that hold the number of active listeners.
-	 * This number itself is protected with a mutex
-	 */
-	int nusers;
 };
 
 void put_j1939_ecu(struct j1939_ecu *ecu);
