@@ -698,9 +698,23 @@ void j1939sk_netdev_event(int ifindex, int error_code)
 	list_for_each_entry(jsk, &j1939_socks, list) {
 		if (jsk->sk.sk_bound_dev_if != ifindex)
 			continue;
+
 		jsk->sk.sk_err = error_code;
 		if (!sock_flag(&jsk->sk, SOCK_DEAD))
 			jsk->sk.sk_error_report(&jsk->sk);
+
+		if (error_code == ENETDOWN) {
+			struct j1939_priv *priv;
+			struct net_device *netdev;
+
+			priv = j1939_priv_get_by_ifindex(ifindex);
+			netdev = priv->netdev;
+			j1939_addr_local_put(priv, jsk->addr.sa);
+			j1939_name_local_put(priv, jsk->addr.src_name);
+			j1939_priv_put(priv);
+			j1939_netdev_stop(netdev);
+		}
+
 		/* do not remove filters here */
 	}
 	spin_unlock_bh(&j1939_socks_lock);
