@@ -143,9 +143,17 @@ static inline bool pgn_is_pdu1(pgn_t pgn)
 	return (pgn & 0xff00) < 0xf000;
 }
 
+/* function to see if pgn is to be evaluated */
 static inline bool pgn_is_valid(pgn_t pgn)
 {
 	return pgn <= PGN_MAX;
+}
+
+/* test function to avoid non-zero DA placeholder
+ * for pdu1 pgn's */
+static inline bool pgn_is_clean_pdu(pgn_t pgn)
+{
+	return pgn_is_pdu1(pgn) ? !(pgn & 0xff) : 1;
 }
 
 /* utility to correctly unregister a SA */
