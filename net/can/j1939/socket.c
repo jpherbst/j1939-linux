@@ -700,13 +700,13 @@ static int j1939sk_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 	return ret;
 }
 
-void j1939sk_netdev_event(int ifindex, int error_code)
+void j1939sk_netdev_event(struct net_device *netdev, int error_code)
 {
 	struct j1939_sock *jsk;
 
 	spin_lock_bh(&j1939_socks_lock);
 	list_for_each_entry(jsk, &j1939_socks, list) {
-		if (jsk->sk.sk_bound_dev_if != ifindex)
+		if (jsk->sk.sk_bound_dev_if != netdev->ifindex)
 			continue;
 
 		jsk->sk.sk_err = error_code;
@@ -715,16 +715,14 @@ void j1939sk_netdev_event(int ifindex, int error_code)
 
 		if (error_code == ENODEV) {
 			struct j1939_priv *priv;
-			struct net_device *netdev;
 
-			priv = j1939_priv_get_by_ifindex(ifindex);
-			netdev = priv->netdev;
+			priv = j1939_priv_get(netdev);
 			j1939_addr_local_put(priv, jsk->addr.sa);
 			j1939_name_local_put(priv, jsk->addr.src_name);
 			j1939_priv_put(priv);
+
 			j1939_netdev_stop(netdev);
 		}
-
 		/* do not remove filters here */
 	}
 	spin_unlock_bh(&j1939_socks_lock);

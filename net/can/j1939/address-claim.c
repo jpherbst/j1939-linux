@@ -123,11 +123,10 @@ int j1939_fixup_address_claim(struct sk_buff *skb)
 	return 0;
 }
 
-static void j1939_process_address_claim(struct sk_buff *skb)
+static void j1939_process_address_claim(struct sk_buff *skb, struct j1939_priv *priv)
 {
 	struct j1939_sk_buff_cb *skcb = j1939_get_cb(skb);
 	struct j1939_ecu *ecu, *prev;
-	struct j1939_priv *priv;
 	name_t name;
 
 	if (skb->len != 8) {
@@ -146,10 +145,6 @@ static void j1939_process_address_claim(struct sk_buff *skb)
 		pr_notice("rx address claim with broadcast sa\n");
 		return;
 	}
-
-	priv = j1939_priv_get_by_ifindex(skb->skb_iif);
-	if (!priv)
-		return;
 
 	write_lock_bh(&priv->lock);
 
@@ -188,7 +183,6 @@ static void j1939_process_address_claim(struct sk_buff *skb)
 	ecu->rxtime = ktime_get();
  done:
 	write_unlock_bh(&priv->lock);
-	j1939_priv_put(priv);
 }
 
 void j1939_recv_address_claim(struct sk_buff *skb, struct j1939_priv *priv)
@@ -198,9 +192,9 @@ void j1939_recv_address_claim(struct sk_buff *skb, struct j1939_priv *priv)
 
 	/* network mgmt */
 	if (skcb->addr.pgn == PGN_ADDRESS_CLAIMED) {
-		j1939_process_address_claim(skb);
+		j1939_process_address_claim(skb, priv);
 	} else if (j1939_address_is_unicast(skcb->addr.sa)) {
-		ecu = j1939_ecu_find_by_addr(skcb->addr.sa, skb->skb_iif);
+		ecu = _j1939_ecu_find_by_addr(skcb->addr.sa, priv);
 		if (ecu) {
 			/* source administration */
 			ecu->rxtime = ktime_get();
@@ -210,7 +204,7 @@ void j1939_recv_address_claim(struct sk_buff *skb, struct j1939_priv *priv)
 	}
 
 	/* assign destination stuff */
-	ecu = j1939_ecu_find_by_addr(skcb->addr.da, skb->skb_iif);
+	ecu = _j1939_ecu_find_by_addr(skcb->addr.da, priv);
 	if (ecu) {
 		skcb->addr.dst_name = ecu->name;
 		put_j1939_ecu(ecu);

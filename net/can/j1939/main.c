@@ -338,11 +338,11 @@ static int j1939_netdev_notify(struct notifier_block *nb,
 	switch (msg) {
 	case NETDEV_UNREGISTER:
 		j1939tp_rmdev_notifier(netdev);
-		j1939sk_netdev_event(netdev->ifindex, ENODEV);
+		j1939sk_netdev_event(netdev, ENODEV);
 		break;
 
 	case NETDEV_DOWN:
-		j1939sk_netdev_event(netdev->ifindex, ENETDOWN);
+		j1939sk_netdev_event(netdev, ENETDOWN);
 		break;
 	}
 

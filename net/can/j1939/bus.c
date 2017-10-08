@@ -99,22 +99,17 @@ void _j1939_ecu_unregister(struct j1939_ecu *ecu)
 	put_j1939_ecu(ecu);
 }
 
-struct j1939_ecu *j1939_ecu_find_by_addr(u8 sa, int ifindex)
+struct j1939_ecu *_j1939_ecu_find_by_addr(u8 sa, struct j1939_priv *priv)
 {
 	struct j1939_ecu *ecu;
-	struct j1939_priv *priv;
 
 	if (!j1939_address_is_unicast(sa))
-		return NULL;
-	priv = j1939_priv_get_by_ifindex(ifindex);
-	if (!priv)
 		return NULL;
 	read_lock_bh(&priv->lock);
 	ecu = priv->ents[sa].ecu;
 	if (ecu)
 		get_j1939_ecu(ecu);
 	read_unlock_bh(&priv->lock);
-	j1939_priv_put(priv);
 	return ecu;
 }
 
