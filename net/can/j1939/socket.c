@@ -704,7 +704,7 @@ void j1939sk_netdev_event(int ifindex, int error_code)
 		if (!sock_flag(&jsk->sk, SOCK_DEAD))
 			jsk->sk.sk_error_report(&jsk->sk);
 
-		if (error_code == ENETDOWN) {
+		if (error_code == ENODEV) {
 			struct j1939_priv *priv;
 			struct net_device *netdev;
 
