@@ -55,11 +55,11 @@
 #include <unistd.h>
 
 #ifndef SO_EE_ORIGIN_ZEROCOPY
-#define SO_EE_ORIGIN_ZEROCOPY		SO_EE_ORIGIN_UPAGE
+#define SO_EE_ORIGIN_ZEROCOPY		5
 #endif
 
 #ifndef SO_ZEROCOPY
-#define SO_ZEROCOPY	59
+#define SO_ZEROCOPY	60
 #endif
 
 #ifndef SO_EE_CODE_ZEROCOPY_COPIED
@@ -382,8 +382,8 @@ static void do_recv_remaining_completions(int fd)
 	}
 
 	if (completions < expected_completions)
-		error(1, 0, "missing notifications: %lu < %lu\n",
-		      completions, expected_completions);
+		fprintf(stderr, "missing notifications: %lu < %lu\n",
+			completions, expected_completions);
 }
 
 static void do_tx(int domain, int type, int protocol)

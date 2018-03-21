@@ -1847,7 +1847,7 @@ static int liquidio_ptp_settime(struct ptp_clock_info *ptp,
 	struct lio *lio = container_of(ptp, struct lio, ptp_info);
 	struct octeon_device *oct = (struct octeon_device *)lio->oct_dev;
 
-	ns = timespec_to_ns(ts);
+	ns = timespec64_to_ns(ts);
 
 	spin_lock_irqsave(&lio->ptp_lock, flags);
 	lio_pci_writeq(oct, ns, CN6XXX_MIO_PTP_CLOCK_HI);
@@ -4125,12 +4125,6 @@ static int octeon_device_init(struct octeon_device *octeon_dev)
 			dev_err(&octeon_dev->pci_dev->dev, "Could not load firmware to board\n");
 			return 1;
 		}
-		/* set bit 1 of SLI_SCRATCH_1 to indicate that firmware is
-		 * loaded
-		 */
-		if (OCTEON_CN23XX_PF(octeon_dev))
-			octeon_write_csr64(octeon_dev, CN23XX_SLI_SCRATCH1,
-					   2ULL);
 	}
 
 	handshake[octeon_dev->octeon_id].init_ok = 1;

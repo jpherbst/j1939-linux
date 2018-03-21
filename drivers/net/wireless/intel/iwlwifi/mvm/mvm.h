@@ -924,8 +924,6 @@ struct iwl_mvm {
 	struct iwl_bt_coex_profile_notif last_bt_notif;
 	struct iwl_bt_coex_ci_cmd last_bt_ci_cmd;
 
-	u32 last_ant_isol;
-	u8 last_corun_lut;
 	u8 bt_tx_prio;
 	enum iwl_bt_force_ant_mode bt_force_ant_mode;
 
@@ -1017,6 +1015,9 @@ struct iwl_mvm {
 	bool drop_bcn_ap_mode;
 
 	struct delayed_work cs_tx_unblock_dwork;
+
+	/* does a monitor vif exist (only one can exist hence bool) */
+	bool monitor_on;
 #ifdef CONFIG_ACPI
 	struct iwl_mvm_sar_profile sar_profiles[IWL_MVM_SAR_PROFILE_NUM];
 	struct iwl_mvm_geo_profile geo_profiles[IWL_NUM_GEO_PROFILES];
@@ -1161,7 +1162,7 @@ static inline bool iwl_mvm_is_lar_supported(struct iwl_mvm *mvm)
 	 * Enable LAR only if it is supported by the FW (TLV) &&
 	 * enabled in the NVM
 	 */
-	if (mvm->cfg->ext_nvm)
+	if (mvm->cfg->nvm_type == IWL_NVM_EXT)
 		return nvm_lar && tlv_lar;
 	else
 		return tlv_lar;
@@ -1173,13 +1174,6 @@ static inline bool iwl_mvm_is_wifi_mcc_supported(struct iwl_mvm *mvm)
 			  IWL_UCODE_TLV_API_WIFI_MCC_UPDATE) ||
 	       fw_has_capa(&mvm->fw->ucode_capa,
 			   IWL_UCODE_TLV_CAPA_LAR_MULTI_MCC);
-}
-
-static inline bool iwl_mvm_bt_is_plcr_supported(struct iwl_mvm *mvm)
-{
-	return fw_has_capa(&mvm->fw->ucode_capa,
-			   IWL_UCODE_TLV_CAPA_BT_COEX_PLCR) &&
-		IWL_MVM_BT_COEX_CORUNNING;
 }
 
 static inline bool iwl_mvm_bt_is_rrc_supported(struct iwl_mvm *mvm)
@@ -1249,6 +1243,12 @@ static inline bool iwl_mvm_has_new_rx_stats_api(struct iwl_mvm *mvm)
 {
 	return fw_has_api(&mvm->fw->ucode_capa,
 			  IWL_UCODE_TLV_API_NEW_RX_STATS);
+}
+
+static inline bool iwl_mvm_has_new_ats_coex_api(struct iwl_mvm *mvm)
+{
+	return fw_has_api(&mvm->fw->ucode_capa,
+			  IWL_UCODE_TLV_API_COEX_ATS_EXTERNAL);
 }
 
 static inline struct agg_tx_status *
@@ -1376,8 +1376,7 @@ int iwl_mvm_request_statistics(struct iwl_mvm *mvm, bool clear);
 void iwl_mvm_accu_radio_stats(struct iwl_mvm *mvm);
 
 /* NVM */
-int iwl_nvm_init(struct iwl_mvm *mvm, bool read_nvm_from_nic);
-int iwl_mvm_nvm_get_from_fw(struct iwl_mvm *mvm);
+int iwl_nvm_init(struct iwl_mvm *mvm);
 int iwl_mvm_load_nvm_to_nic(struct iwl_mvm *mvm);
 int iwl_mvm_read_external_nvm(struct iwl_mvm *mvm);
 
@@ -1566,12 +1565,16 @@ void iwl_mvm_power_uapsd_misbehaving_ap_notif(struct iwl_mvm *mvm,
 #ifdef CONFIG_IWLWIFI_LEDS
 int iwl_mvm_leds_init(struct iwl_mvm *mvm);
 void iwl_mvm_leds_exit(struct iwl_mvm *mvm);
+void iwl_mvm_leds_sync(struct iwl_mvm *mvm);
 #else
 static inline int iwl_mvm_leds_init(struct iwl_mvm *mvm)
 {
 	return 0;
 }
 static inline void iwl_mvm_leds_exit(struct iwl_mvm *mvm)
+{
+}
+static inline void iwl_mvm_leds_sync(struct iwl_mvm *mvm)
 {
 }
 #endif
@@ -1751,6 +1754,7 @@ void iwl_mvm_thermal_exit(struct iwl_mvm *mvm);
 void iwl_mvm_set_hw_ctkill_state(struct iwl_mvm *mvm, bool state);
 int iwl_mvm_get_temp(struct iwl_mvm *mvm, s32 *temp);
 void iwl_mvm_ct_kill_notif(struct iwl_mvm *mvm, struct iwl_rx_cmd_buffer *rxb);
+void iwl_mvm_enter_ctkill(struct iwl_mvm *mvm);
 int iwl_mvm_send_temp_report_ths_cmd(struct iwl_mvm *mvm);
 int iwl_mvm_ctdp_command(struct iwl_mvm *mvm, u32 op, u32 budget);
 
@@ -1824,21 +1828,7 @@ int iwl_mvm_send_lqm_cmd(struct ieee80211_vif *vif,
 			 u32 duration, u32 timeout);
 bool iwl_mvm_lqm_active(struct iwl_mvm *mvm);
 
-#ifdef CONFIG_ACPI
 int iwl_mvm_sar_select_profile(struct iwl_mvm *mvm, int prof_a, int prof_b);
 int iwl_mvm_get_sar_geo_profile(struct iwl_mvm *mvm);
-#else
-static inline
-int iwl_mvm_sar_select_profile(struct iwl_mvm *mvm, int prof_a, int prof_b)
-{
-	return -ENOENT;
-}
-
-static inline
-int iwl_mvm_get_sar_geo_profile(struct iwl_mvm *mvm)
-{
-	return -ENOENT;
-}
-#endif /* CONFIG_ACPI */
 
 #endif /* __IWL_MVM_H__ */

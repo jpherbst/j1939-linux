@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 #ifndef _NET_XFRM_H
 #define _NET_XFRM_H
 
@@ -1019,6 +1020,7 @@ struct xfrm_offload {
 #define	CRYPTO_FALLBACK		8
 #define	XFRM_GSO_SEGMENT	16
 #define	XFRM_GRO		32
+#define	XFRM_ESP_NO_TRAILER	64
 
 	__u32			status;
 #define CRYPTO_SUCCESS				1

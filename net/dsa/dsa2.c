@@ -496,13 +496,14 @@ static int dsa_cpu_parse(struct dsa_port *port, u32 index,
 		if (!ethernet)
 			return -EINVAL;
 		ethernet_dev = of_find_net_device_by_node(ethernet);
+		if (!ethernet_dev)
+			return -EPROBE_DEFER;
 	} else {
 		ethernet_dev = dsa_dev_to_net_device(ds->cd->netdev[index]);
+		if (!ethernet_dev)
+			return -EPROBE_DEFER;
 		dev_put(ethernet_dev);
 	}
-
-	if (!ethernet_dev)
-		return -EPROBE_DEFER;
 
 	if (!dst->cpu_dp) {
 		dst->cpu_dp = port;
@@ -577,7 +578,7 @@ static int dsa_dst_parse(struct dsa_switch_tree *dst)
 			return err;
 	}
 
-	if (!dst->cpu_dp->netdev) {
+	if (!dst->cpu_dp) {
 		pr_warn("Tree has no master device\n");
 		return -EINVAL;
 	}

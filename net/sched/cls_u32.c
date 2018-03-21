@@ -40,6 +40,8 @@
 #include <linux/rtnetlink.h>
 #include <linux/skbuff.h>
 #include <linux/bitmap.h>
+#include <linux/netdevice.h>
+#include <linux/hash.h>
 #include <net/netlink.h>
 #include <net/act_api.h>
 #include <net/pkt_cls.h>
@@ -66,7 +68,10 @@ struct tc_u_knode {
 	u32 __percpu		*pcpu_success;
 #endif
 	struct tcf_proto	*tp;
-	struct rcu_head		rcu;
+	union {
+		struct work_struct	work;
+		struct rcu_head		rcu;
+	};
 	/* The 'sel' field MUST be the last field in structure to allow for
 	 * tc_u32_keys allocated at end of structure.
 	 */
@@ -92,6 +97,7 @@ struct tc_u_common {
 	struct Qdisc		*q;
 	int			refcnt;
 	u32			hgenerator;
+	struct hlist_node	hnode;
 	struct rcu_head		rcu;
 };
 
@@ -323,12 +329,40 @@ static u32 gen_new_htid(struct tc_u_common *tp_c)
 	return i > 0 ? (tp_c->hgenerator|0x800)<<20 : 0;
 }
 
+static struct hlist_head *tc_u_common_hash;
+
+#define U32_HASH_SHIFT 10
+#define U32_HASH_SIZE (1 << U32_HASH_SHIFT)
+
+static unsigned int tc_u_hash(const struct tcf_proto *tp)
+{
+	struct net_device *dev = tp->q->dev_queue->dev;
+	u32 qhandle = tp->q->handle;
+	int ifindex = dev->ifindex;
+
+	return hash_64((u64)ifindex << 32 | qhandle, U32_HASH_SHIFT);
+}
+
+static struct tc_u_common *tc_u_common_find(const struct tcf_proto *tp)
+{
+	struct tc_u_common *tc;
+	unsigned int h;
+
+	h = tc_u_hash(tp);
+	hlist_for_each_entry(tc, &tc_u_common_hash[h], hnode) {
+		if (tc->q == tp->q)
+			return tc;
+	}
+	return NULL;
+}
+
 static int u32_init(struct tcf_proto *tp)
 {
 	struct tc_u_hnode *root_ht;
 	struct tc_u_common *tp_c;
+	unsigned int h;
 
-	tp_c = tp->q->u32_node;
+	tp_c = tc_u_common_find(tp);
 
 	root_ht = kzalloc(sizeof(*root_ht), GFP_KERNEL);
 	if (root_ht == NULL)
@@ -345,7 +379,10 @@ static int u32_init(struct tcf_proto *tp)
 			return -ENOBUFS;
 		}
 		tp_c->q = tp->q;
-		tp->q->u32_node = tp_c;
+		INIT_HLIST_NODE(&tp_c->hnode);
+
+		h = tc_u_hash(tp);
+		hlist_add_head(&tp_c->hnode, &tc_u_common_hash[h]);
 	}
 
 	tp_c->refcnt++;
@@ -362,6 +399,7 @@ static int u32_destroy_key(struct tcf_proto *tp, struct tc_u_knode *n,
 			   bool free_pf)
 {
 	tcf_exts_destroy(&n->exts);
+	tcf_exts_put_net(&n->exts);
 	if (n->ht_down)
 		n->ht_down->refcnt--;
 #ifdef CONFIG_CLS_U32_PERF
@@ -384,11 +422,21 @@ static int u32_destroy_key(struct tcf_proto *tp, struct tc_u_knode *n,
  * this the u32_delete_key_rcu variant does not free the percpu
  * statistics.
  */
+static void u32_delete_key_work(struct work_struct *work)
+{
+	struct tc_u_knode *key = container_of(work, struct tc_u_knode, work);
+
+	rtnl_lock();
+	u32_destroy_key(key->tp, key, false);
+	rtnl_unlock();
+}
+
 static void u32_delete_key_rcu(struct rcu_head *rcu)
 {
 	struct tc_u_knode *key = container_of(rcu, struct tc_u_knode, rcu);
 
-	u32_destroy_key(key->tp, key, false);
+	INIT_WORK(&key->work, u32_delete_key_work);
+	tcf_queue_work(&key->work);
 }
 
 /* u32_delete_key_freepf_rcu is the rcu callback variant
@@ -398,11 +446,21 @@ static void u32_delete_key_rcu(struct rcu_head *rcu)
  * for the variant that should be used with keys return from
  * u32_init_knode()
  */
+static void u32_delete_key_freepf_work(struct work_struct *work)
+{
+	struct tc_u_knode *key = container_of(work, struct tc_u_knode, work);
+
+	rtnl_lock();
+	u32_destroy_key(key->tp, key, true);
+	rtnl_unlock();
+}
+
 static void u32_delete_key_freepf_rcu(struct rcu_head *rcu)
 {
 	struct tc_u_knode *key = container_of(rcu, struct tc_u_knode, rcu);
 
-	u32_destroy_key(key->tp, key, true);
+	INIT_WORK(&key->work, u32_delete_key_freepf_work);
+	tcf_queue_work(&key->work);
 }
 
 static int u32_delete_key(struct tcf_proto *tp, struct tc_u_knode *key)
@@ -419,6 +477,7 @@ static int u32_delete_key(struct tcf_proto *tp, struct tc_u_knode *key)
 				RCU_INIT_POINTER(*kp, key->next);
 
 				tcf_unbind_filter(tp, &key->res);
+				tcf_exts_get_net(&key->exts);
 				call_rcu(&key->rcu, u32_delete_key_freepf_rcu);
 				return 0;
 			}
@@ -531,7 +590,10 @@ static void u32_clear_hnode(struct tcf_proto *tp, struct tc_u_hnode *ht)
 					 rtnl_dereference(n->next));
 			tcf_unbind_filter(tp, &n->res);
 			u32_remove_hw_knode(tp, n->handle);
-			call_rcu(&n->rcu, u32_delete_key_freepf_rcu);
+			if (tcf_exts_get_net(&n->exts))
+				call_rcu(&n->rcu, u32_delete_key_freepf_rcu);
+			else
+				u32_destroy_key(n->tp, n, true);
 		}
 	}
 }
@@ -585,7 +647,7 @@ static void u32_destroy(struct tcf_proto *tp)
 	if (--tp_c->refcnt == 0) {
 		struct tc_u_hnode *ht;
 
-		tp->q->u32_node = NULL;
+		hlist_del(&tp_c->hnode);
 
 		for (ht = rtnl_dereference(tp_c->hlist);
 		     ht;
@@ -892,6 +954,7 @@ static int u32_change(struct net *net, struct sk_buff *in_skb,
 
 		u32_replace_knode(tp, tp_c, new);
 		tcf_unbind_filter(tp, &n->res);
+		tcf_exts_get_net(&n->exts);
 		call_rcu(&n->rcu, u32_delete_key_rcu);
 		return 0;
 	}
@@ -1078,6 +1141,14 @@ static void u32_walk(struct tcf_proto *tp, struct tcf_walker *arg)
 	}
 }
 
+static void u32_bind_class(void *fh, u32 classid, unsigned long cl)
+{
+	struct tc_u_knode *n = fh;
+
+	if (n && n->res.classid == classid)
+		n->res.class = cl;
+}
+
 static int u32_dump(struct net *net, struct tcf_proto *tp, void *fh,
 		    struct sk_buff *skb, struct tcmsg *t)
 {
@@ -1208,11 +1279,14 @@ static struct tcf_proto_ops cls_u32_ops __read_mostly = {
 	.delete		=	u32_delete,
 	.walk		=	u32_walk,
 	.dump		=	u32_dump,
+	.bind_class	=	u32_bind_class,
 	.owner		=	THIS_MODULE,
 };
 
 static int __init init_u32(void)
 {
+	int i, ret;
+
 	pr_info("u32 classifier\n");
 #ifdef CONFIG_CLS_U32_PERF
 	pr_info("    Performance counters on\n");
@@ -1223,12 +1297,25 @@ static int __init init_u32(void)
 #ifdef CONFIG_NET_CLS_ACT
 	pr_info("    Actions configured\n");
 #endif
-	return register_tcf_proto_ops(&cls_u32_ops);
+	tc_u_common_hash = kvmalloc_array(U32_HASH_SIZE,
+					  sizeof(struct hlist_head),
+					  GFP_KERNEL);
+	if (!tc_u_common_hash)
+		return -ENOMEM;
+
+	for (i = 0; i < U32_HASH_SIZE; i++)
+		INIT_HLIST_HEAD(&tc_u_common_hash[i]);
+
+	ret = register_tcf_proto_ops(&cls_u32_ops);
+	if (ret)
+		kvfree(tc_u_common_hash);
+	return ret;
 }
 
 static void __exit exit_u32(void)
 {
 	unregister_tcf_proto_ops(&cls_u32_ops);
+	kvfree(tc_u_common_hash);
 }
 
 module_init(init_u32)

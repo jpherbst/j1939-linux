@@ -653,6 +653,10 @@ static void mark_reg_read(const struct bpf_verifier_state *state, u32 regno)
 {
 	struct bpf_verifier_state *parent = state->parent;
 
+	if (regno == BPF_REG_FP)
+		/* We don't need to worry about FP liveness because it's read-only */
+		return;
+
 	while (parent) {
 		/* if read wasn't screened by an earlier write ... */
 		if (state->regs[regno].live & REG_LIVE_WRITTEN)
@@ -832,11 +836,6 @@ static int check_map_access(struct bpf_verifier_env *env, u32 regno,
 	 */
 	if (log_level)
 		print_verifier_state(state);
-	/* If the offset is variable, we will need to be stricter in state
-	 * pruning from now on.
-	 */
-	if (!tnum_is_const(reg->var_off))
-		env->varlen_map_value_access = true;
 	/* The minimum value is only important with signed
 	 * comparisons where we can't assume the floor of a
 	 * value is 0.  If we are using signed variables for our
@@ -1117,7 +1116,12 @@ static int check_mem_access(struct bpf_verifier_env *env, int insn_idx, u32 regn
 		/* ctx accesses must be at a fixed offset, so that we can
 		 * determine what type of data were returned.
 		 */
-		if (!tnum_is_const(reg->var_off)) {
+		if (reg->off) {
+			verbose("dereference of modified ctx ptr R%d off=%d+%d, ctx+const is allowed, ctx+const+const is not\n",
+				regno, reg->off, off - reg->off);
+			return -EACCES;
+		}
+		if (!tnum_is_const(reg->var_off) || reg->var_off.value) {
 			char tn_buf[48];
 
 			tnum_strn(tn_buf, sizeof(tn_buf), reg->var_off);
@@ -1125,7 +1129,6 @@ static int check_mem_access(struct bpf_verifier_env *env, int insn_idx, u32 regn
 				tn_buf, off, size);
 			return -EACCES;
 		}
-		off += reg->var_off.value;
 		err = check_ctx_access(env, insn_idx, off, size, t, &reg_type);
 		if (!err && t == BPF_READ && value_regno >= 0) {
 			/* ctx access returns either a scalar, or a
@@ -2297,7 +2300,8 @@ static int check_alu_op(struct bpf_verifier_env *env, struct bpf_insn *insn)
 			}
 		} else {
 			if (insn->src_reg != BPF_REG_0 || insn->off != 0 ||
-			    (insn->imm != 16 && insn->imm != 32 && insn->imm != 64)) {
+			    (insn->imm != 16 && insn->imm != 32 && insn->imm != 64) ||
+			    BPF_CLASS(insn->code) == BPF_ALU64) {
 				verbose("BPF_END uses reserved fields\n");
 				return -EINVAL;
 			}
@@ -2349,6 +2353,7 @@ static int check_alu_op(struct bpf_verifier_env *env, struct bpf_insn *insn)
 				 * copy register state to dest reg
 				 */
 				regs[insn->dst_reg] = regs[insn->src_reg];
+				regs[insn->dst_reg].live |= REG_LIVE_WRITTEN;
 			} else {
 				/* R1 = (u32) R2 */
 				if (is_pointer_value(env, insn->src_reg)) {
@@ -2425,12 +2430,15 @@ static int check_alu_op(struct bpf_verifier_env *env, struct bpf_insn *insn)
 }
 
 static void find_good_pkt_pointers(struct bpf_verifier_state *state,
-				   struct bpf_reg_state *dst_reg)
+				   struct bpf_reg_state *dst_reg,
+				   bool range_right_open)
 {
 	struct bpf_reg_state *regs = state->regs, *reg;
+	u16 new_range;
 	int i;
 
-	if (dst_reg->off < 0)
+	if (dst_reg->off < 0 ||
+	    (dst_reg->off == 0 && range_right_open))
 		/* This doesn't give us any range */
 		return;
 
@@ -2441,9 +2449,13 @@ static void find_good_pkt_pointers(struct bpf_verifier_state *state,
 		 */
 		return;
 
-	/* LLVM can generate four kind of checks:
+	new_range = dst_reg->off;
+	if (range_right_open)
+		new_range--;
+
+	/* Examples for register markings:
 	 *
-	 * Type 1/2:
+	 * pkt_data in dst register:
 	 *
 	 *   r2 = r3;
 	 *   r2 += 8;
@@ -2460,7 +2472,7 @@ static void find_good_pkt_pointers(struct bpf_verifier_state *state,
 	 *     r2=pkt(id=n,off=8,r=0)
 	 *     r3=pkt(id=n,off=0,r=0)
 	 *
-	 * Type 3/4:
+	 * pkt_data in src register:
 	 *
 	 *   r2 = r3;
 	 *   r2 += 8;
@@ -2478,7 +2490,9 @@ static void find_good_pkt_pointers(struct bpf_verifier_state *state,
 	 *     r3=pkt(id=n,off=0,r=0)
 	 *
 	 * Find register r3 and mark its range as r3=pkt(id=n,off=0,r=8)
-	 * so that range of bytes [r3, r3 + 8) is safe to access.
+	 * or r3=pkt(id=n,off=0,r=8-1), so that range of bytes [r3, r3 + 8)
+	 * and [r3, r3 + 8-1) respectively is safe to access depending on
+	 * the check.
 	 */
 
 	/* If our ids match, then we must have the same max_value.  And we
@@ -2489,14 +2503,14 @@ static void find_good_pkt_pointers(struct bpf_verifier_state *state,
 	for (i = 0; i < MAX_BPF_REG; i++)
 		if (regs[i].type == PTR_TO_PACKET && regs[i].id == dst_reg->id)
 			/* keep the maximum range already checked */
-			regs[i].range = max_t(u16, regs[i].range, dst_reg->off);
+			regs[i].range = max(regs[i].range, new_range);
 
 	for (i = 0; i < MAX_BPF_STACK; i += BPF_REG_SIZE) {
 		if (state->stack_slot_type[i] != STACK_SPILL)
 			continue;
 		reg = &state->spilled_regs[i / BPF_REG_SIZE];
 		if (reg->type == PTR_TO_PACKET && reg->id == dst_reg->id)
-			reg->range = max_t(u16, reg->range, dst_reg->off);
+			reg->range = max(reg->range, new_range);
 	}
 }
 
@@ -2860,19 +2874,43 @@ static int check_cond_jmp_op(struct bpf_verifier_env *env,
 	} else if (BPF_SRC(insn->code) == BPF_X && opcode == BPF_JGT &&
 		   dst_reg->type == PTR_TO_PACKET &&
 		   regs[insn->src_reg].type == PTR_TO_PACKET_END) {
-		find_good_pkt_pointers(this_branch, dst_reg);
+		/* pkt_data' > pkt_end */
+		find_good_pkt_pointers(this_branch, dst_reg, false);
+	} else if (BPF_SRC(insn->code) == BPF_X && opcode == BPF_JGT &&
+		   dst_reg->type == PTR_TO_PACKET_END &&
+		   regs[insn->src_reg].type == PTR_TO_PACKET) {
+		/* pkt_end > pkt_data' */
+		find_good_pkt_pointers(other_branch, &regs[insn->src_reg], true);
 	} else if (BPF_SRC(insn->code) == BPF_X && opcode == BPF_JLT &&
 		   dst_reg->type == PTR_TO_PACKET &&
 		   regs[insn->src_reg].type == PTR_TO_PACKET_END) {
-		find_good_pkt_pointers(other_branch, dst_reg);
+		/* pkt_data' < pkt_end */
+		find_good_pkt_pointers(other_branch, dst_reg, true);
+	} else if (BPF_SRC(insn->code) == BPF_X && opcode == BPF_JLT &&
+		   dst_reg->type == PTR_TO_PACKET_END &&
+		   regs[insn->src_reg].type == PTR_TO_PACKET) {
+		/* pkt_end < pkt_data' */
+		find_good_pkt_pointers(this_branch, &regs[insn->src_reg], false);
+	} else if (BPF_SRC(insn->code) == BPF_X && opcode == BPF_JGE &&
+		   dst_reg->type == PTR_TO_PACKET &&
+		   regs[insn->src_reg].type == PTR_TO_PACKET_END) {
+		/* pkt_data' >= pkt_end */
+		find_good_pkt_pointers(this_branch, dst_reg, true);
 	} else if (BPF_SRC(insn->code) == BPF_X && opcode == BPF_JGE &&
 		   dst_reg->type == PTR_TO_PACKET_END &&
 		   regs[insn->src_reg].type == PTR_TO_PACKET) {
-		find_good_pkt_pointers(other_branch, &regs[insn->src_reg]);
+		/* pkt_end >= pkt_data' */
+		find_good_pkt_pointers(other_branch, &regs[insn->src_reg], false);
+	} else if (BPF_SRC(insn->code) == BPF_X && opcode == BPF_JLE &&
+		   dst_reg->type == PTR_TO_PACKET &&
+		   regs[insn->src_reg].type == PTR_TO_PACKET_END) {
+		/* pkt_data' <= pkt_end */
+		find_good_pkt_pointers(other_branch, dst_reg, false);
 	} else if (BPF_SRC(insn->code) == BPF_X && opcode == BPF_JLE &&
 		   dst_reg->type == PTR_TO_PACKET_END &&
 		   regs[insn->src_reg].type == PTR_TO_PACKET) {
-		find_good_pkt_pointers(this_branch, &regs[insn->src_reg]);
+		/* pkt_end <= pkt_data' */
+		find_good_pkt_pointers(this_branch, &regs[insn->src_reg], true);
 	} else if (is_pointer_value(env, insn->dst_reg)) {
 		verbose("R%d pointer comparison prohibited\n", insn->dst_reg);
 		return -EACCES;
@@ -3247,9 +3285,8 @@ static bool check_ids(u32 old_id, u32 cur_id, struct idpair *idmap)
 }
 
 /* Returns true if (rold safe implies rcur safe) */
-static bool regsafe(struct bpf_reg_state *rold,
-		    struct bpf_reg_state *rcur,
-		    bool varlen_map_access, struct idpair *idmap)
+static bool regsafe(struct bpf_reg_state *rold, struct bpf_reg_state *rcur,
+		    struct idpair *idmap)
 {
 	if (!(rold->live & REG_LIVE_READ))
 		/* explored state didn't use this */
@@ -3281,22 +3318,14 @@ static bool regsafe(struct bpf_reg_state *rold,
 			       tnum_is_unknown(rold->var_off);
 		}
 	case PTR_TO_MAP_VALUE:
-		if (varlen_map_access) {
-			/* If the new min/max/var_off satisfy the old ones and
-			 * everything else matches, we are OK.
-			 * We don't care about the 'id' value, because nothing
-			 * uses it for PTR_TO_MAP_VALUE (only for ..._OR_NULL)
-			 */
-			return memcmp(rold, rcur, offsetof(struct bpf_reg_state, id)) == 0 &&
-			       range_within(rold, rcur) &&
-			       tnum_in(rold->var_off, rcur->var_off);
-		} else {
-			/* If the ranges/var_off were not the same, but
-			 * everything else was and we didn't do a variable
-			 * access into a map then we are a-ok.
-			 */
-			return memcmp(rold, rcur, offsetof(struct bpf_reg_state, id)) == 0;
-		}
+		/* If the new min/max/var_off satisfy the old ones and
+		 * everything else matches, we are OK.
+		 * We don't care about the 'id' value, because nothing
+		 * uses it for PTR_TO_MAP_VALUE (only for ..._OR_NULL)
+		 */
+		return memcmp(rold, rcur, offsetof(struct bpf_reg_state, id)) == 0 &&
+		       range_within(rold, rcur) &&
+		       tnum_in(rold->var_off, rcur->var_off);
 	case PTR_TO_MAP_VALUE_OR_NULL:
 		/* a PTR_TO_MAP_VALUE could be safe to use as a
 		 * PTR_TO_MAP_VALUE_OR_NULL into the same map.
@@ -3380,7 +3409,6 @@ static bool states_equal(struct bpf_verifier_env *env,
 			 struct bpf_verifier_state *old,
 			 struct bpf_verifier_state *cur)
 {
-	bool varlen_map_access = env->varlen_map_value_access;
 	struct idpair *idmap;
 	bool ret = false;
 	int i;
@@ -3391,8 +3419,7 @@ static bool states_equal(struct bpf_verifier_env *env,
 		return false;
 
 	for (i = 0; i < MAX_BPF_REG; i++) {
-		if (!regsafe(&old->regs[i], &cur->regs[i], varlen_map_access,
-			     idmap))
+		if (!regsafe(&old->regs[i], &cur->regs[i], idmap))
 			goto out_free;
 	}
 
@@ -3412,7 +3439,7 @@ static bool states_equal(struct bpf_verifier_env *env,
 			continue;
 		if (!regsafe(&old->spilled_regs[i / BPF_REG_SIZE],
 			     &cur->spilled_regs[i / BPF_REG_SIZE],
-			     varlen_map_access, idmap))
+			     idmap))
 			/* when explored and current stack slot are both storing
 			 * spilled registers, check that stored pointers types
 			 * are the same as well.
@@ -3433,9 +3460,16 @@ out_free:
 	return ret;
 }
 
+/* A write screens off any subsequent reads; but write marks come from the
+ * straight-line code between a state and its parent.  When we arrive at a
+ * jump target (in the first iteration of the propagate_liveness() loop),
+ * we didn't arrive by the straight-line code, so read marks in state must
+ * propagate to parent regardless of state's write marks.
+ */
 static bool do_propagate_liveness(const struct bpf_verifier_state *state,
 				  struct bpf_verifier_state *parent)
 {
+	bool writes = parent == state->parent; /* Observe write marks */
 	bool touched = false; /* any changes made? */
 	int i;
 
@@ -3447,7 +3481,9 @@ static bool do_propagate_liveness(const struct bpf_verifier_state *state,
 	for (i = 0; i < BPF_REG_FP; i++) {
 		if (parent->regs[i].live & REG_LIVE_READ)
 			continue;
-		if (state->regs[i].live == REG_LIVE_READ) {
+		if (writes && (state->regs[i].live & REG_LIVE_WRITTEN))
+			continue;
+		if (state->regs[i].live & REG_LIVE_READ) {
 			parent->regs[i].live |= REG_LIVE_READ;
 			touched = true;
 		}
@@ -3460,7 +3496,9 @@ static bool do_propagate_liveness(const struct bpf_verifier_state *state,
 			continue;
 		if (parent->spilled_regs[i].live & REG_LIVE_READ)
 			continue;
-		if (state->spilled_regs[i].live == REG_LIVE_READ) {
+		if (writes && (state->spilled_regs[i].live & REG_LIVE_WRITTEN))
+			continue;
+		if (state->spilled_regs[i].live & REG_LIVE_READ) {
 			parent->spilled_regs[i].live |= REG_LIVE_READ;
 			touched = true;
 		}
@@ -3468,6 +3506,15 @@ static bool do_propagate_liveness(const struct bpf_verifier_state *state,
 	return touched;
 }
 
+/* "parent" is "a state from which we reach the current state", but initially
+ * it is not the state->parent (i.e. "the state whose straight-line code leads
+ * to the current state"), instead it is the state that happened to arrive at
+ * a (prunable) equivalent of the current state.  See comment above
+ * do_propagate_liveness() for consequences of this.
+ * This function is just a more efficient way of calling mark_reg_read() or
+ * mark_stack_slot_read() on each reg in "parent" that is read in "state",
+ * though it requires that parent != state->parent in the call arguments.
+ */
 static void propagate_liveness(const struct bpf_verifier_state *state,
 			       struct bpf_verifier_state *parent)
 {
@@ -3496,6 +3543,12 @@ static int is_state_visited(struct bpf_verifier_env *env, int insn_idx)
 			/* reached equivalent register/stack state,
 			 * prune the search.
 			 * Registers read by the continuation are read by us.
+			 * If we have any write marks in env->cur_state, they
+			 * will prevent corresponding reads in the continuation
+			 * from reaching our parent (an explored_state).  Our
+			 * own state will get the read marks recorded, but
+			 * they'll be immediately forgotten as we're pruning
+			 * this state and will pop a new one.
 			 */
 			propagate_liveness(&sl->state, &env->cur_state);
 			return 1;
@@ -3519,7 +3572,12 @@ static int is_state_visited(struct bpf_verifier_env *env, int insn_idx)
 	env->explored_states[insn_idx] = new_sl;
 	/* connect new state to parentage chain */
 	env->cur_state.parent = &new_sl->state;
-	/* clear liveness marks in current state */
+	/* clear write marks in current state: the writes we did are not writes
+	 * our child did, so they don't screen off its reads from us.
+	 * (There are no read marks in current state, because reads always mark
+	 * their parent and current state never has children yet.  Only
+	 * explored_states can get read marks.)
+	 */
 	for (i = 0; i < BPF_REG_FP; i++)
 		env->cur_state.regs[i].live = REG_LIVE_NONE;
 	for (i = 0; i < MAX_BPF_STACK / BPF_REG_SIZE; i++)
@@ -3550,7 +3608,6 @@ static int do_check(struct bpf_verifier_env *env)
 	init_reg_state(regs);
 	state->parent = NULL;
 	insn_idx = 0;
-	env->varlen_map_value_access = false;
 	for (;;) {
 		struct bpf_insn *insn;
 		u8 class;
@@ -4189,6 +4246,27 @@ static int fixup_bpf_calls(struct bpf_verifier_env *env)
 			continue;
 		}
 
+		if (insn->imm == BPF_FUNC_redirect_map) {
+			/* Note, we cannot use prog directly as imm as subsequent
+			 * rewrites would still change the prog pointer. The only
+			 * stable address we can use is aux, which also works with
+			 * prog clones during blinding.
+			 */
+			u64 addr = (unsigned long)prog->aux;
+			struct bpf_insn r4_ld[] = {
+				BPF_LD_IMM64(BPF_REG_4, addr),
+				*insn,
+			};
+			cnt = ARRAY_SIZE(r4_ld);
+
+			new_prog = bpf_patch_insn_data(env, i + delta, r4_ld, cnt);
+			if (!new_prog)
+				return -ENOMEM;
+
+			delta    += cnt - 1;
+			env->prog = prog = new_prog;
+			insn      = new_prog->insnsi + i + delta;
+		}
 patch_call_imm:
 		fn = prog->aux->ops->get_func_proto(insn->imm);
 		/* all functions that have prototype and verifier allowed

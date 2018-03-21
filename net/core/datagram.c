@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  *	SUCS NET3:
  *
@@ -362,7 +363,7 @@ int __sk_queue_drop_skb(struct sock *sk, struct sk_buff_head *sk_queue,
 	if (flags & MSG_PEEK) {
 		err = -ENOENT;
 		spin_lock_bh(&sk_queue->lock);
-		if (skb == skb_peek(sk_queue)) {
+		if (skb->next) {
 			__skb_unlink(skb, sk_queue);
 			refcount_dec(&skb->users);
 			if (destructor)

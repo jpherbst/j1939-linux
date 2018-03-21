@@ -45,7 +45,7 @@ in many more places. There's xt_bpf for netfilter, cls_bpf in the kernel
 qdisc layer, SECCOMP-BPF (SECure COMPuting [1]), and lots of other places
 such as team driver, PTP code, etc where BPF is being used.
 
- [1] Documentation/prctl/seccomp_filter.txt
+ [1] Documentation/userspace-api/seccomp_filter.rst
 
 Original BPF paper:
 
@@ -337,7 +337,7 @@ Examples for low-level BPF:
   jeq #14, good           /* __NR_rt_sigprocmask */
   jeq #13, good           /* __NR_rt_sigaction */
   jeq #35, good           /* __NR_nanosleep */
-  bad: ret #0             /* SECCOMP_RET_KILL */
+  bad: ret #0             /* SECCOMP_RET_KILL_THREAD */
   good: ret #0x7fff0000   /* SECCOMP_RET_ALLOW */
 
 The above example code can be placed into a file (here called "foo"), and
@@ -596,8 +596,8 @@ skb pointer). All constraints and restrictions from bpf_check_classic() apply
 before a conversion to the new layout is being done behind the scenes!
 
 Currently, the classic BPF format is being used for JITing on most 32-bit
-architectures, whereas x86-64, aarch64, s390x, powerpc64, sparc64 perform JIT
-compilation from eBPF instruction set.
+architectures, whereas x86-64, aarch64, s390x, powerpc64, sparc64, arm32 perform
+JIT compilation from eBPF instruction set.
 
 Some core changes of the new internal format:
 

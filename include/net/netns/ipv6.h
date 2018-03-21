@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
  * ipv6 in net namespaces
  */
@@ -36,6 +37,7 @@ struct netns_sysctl_ipv6 {
 	int idgen_retries;
 	int idgen_delay;
 	int flowlabel_state_ranges;
+	int flowlabel_reflect;
 };
 
 struct netns_ipv6 {

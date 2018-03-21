@@ -1305,6 +1305,26 @@ static int cn23xx_sriov_config(struct octeon_device *oct)
 
 int setup_cn23xx_octeon_pf_device(struct octeon_device *oct)
 {
+	u32 data32;
+	u64 BAR0, BAR1;
+
+	pci_read_config_dword(oct->pci_dev, PCI_BASE_ADDRESS_0, &data32);
+	BAR0 = (u64)(data32 & ~0xf);
+	pci_read_config_dword(oct->pci_dev, PCI_BASE_ADDRESS_1, &data32);
+	BAR0 |= ((u64)data32 << 32);
+	pci_read_config_dword(oct->pci_dev, PCI_BASE_ADDRESS_2, &data32);
+	BAR1 = (u64)(data32 & ~0xf);
+	pci_read_config_dword(oct->pci_dev, PCI_BASE_ADDRESS_3, &data32);
+	BAR1 |= ((u64)data32 << 32);
+
+	if (!BAR0 || !BAR1) {
+		if (!BAR0)
+			dev_err(&oct->pci_dev->dev, "device BAR0 unassigned\n");
+		if (!BAR1)
+			dev_err(&oct->pci_dev->dev, "device BAR1 unassigned\n");
+		return 1;
+	}
+
 	if (octeon_map_pci_barx(oct, 0, 0))
 		return 1;
 
@@ -1442,8 +1462,19 @@ int cn23xx_fw_loaded(struct octeon_device *oct)
 {
 	u64 val;
 
-	val = octeon_read_csr64(oct, CN23XX_SLI_SCRATCH1);
-	return (val >> 1) & 1ULL;
+	/* If there's more than one active PF on this NIC, then that
+	 * implies that the NIC firmware is loaded and running.  This check
+	 * prevents a rare false negative that might occur if we only relied
+	 * on checking the SCR2_BIT_FW_LOADED flag.  The false negative would
+	 * happen if the PF driver sees SCR2_BIT_FW_LOADED as cleared even
+	 * though the firmware was already loaded but still booting and has yet
+	 * to set SCR2_BIT_FW_LOADED.
+	 */
+	if (atomic_read(oct->adapter_refcount) > 1)
+		return 1;
+
+	val = octeon_read_csr64(oct, CN23XX_SLI_SCRATCH2);
+	return (val >> SCR2_BIT_FW_LOADED) & 1ULL;
 }
 
 void cn23xx_tell_vf_its_macaddr_changed(struct octeon_device *oct, int vfidx,

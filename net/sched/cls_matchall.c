@@ -21,7 +21,10 @@ struct cls_mall_head {
 	struct tcf_result res;
 	u32 handle;
 	u32 flags;
-	struct rcu_head	rcu;
+	union {
+		struct work_struct work;
+		struct rcu_head	rcu;
+	};
 };
 
 static int mall_classify(struct sk_buff *skb, const struct tcf_proto *tp,
@@ -32,6 +35,7 @@ static int mall_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 	if (tc_skip_sw(head->flags))
 		return -1;
 
+	*res = head->res;
 	return tcf_exts_exec(skb, &head->exts, res);
 }
 
@@ -40,13 +44,29 @@ static int mall_init(struct tcf_proto *tp)
 	return 0;
 }
 
+static void __mall_destroy(struct cls_mall_head *head)
+{
+	tcf_exts_destroy(&head->exts);
+	tcf_exts_put_net(&head->exts);
+	kfree(head);
+}
+
+static void mall_destroy_work(struct work_struct *work)
+{
+	struct cls_mall_head *head = container_of(work, struct cls_mall_head,
+						  work);
+	rtnl_lock();
+	__mall_destroy(head);
+	rtnl_unlock();
+}
+
 static void mall_destroy_rcu(struct rcu_head *rcu)
 {
 	struct cls_mall_head *head = container_of(rcu, struct cls_mall_head,
 						  rcu);
 
-	tcf_exts_destroy(&head->exts);
-	kfree(head);
+	INIT_WORK(&head->work, mall_destroy_work);
+	tcf_queue_work(&head->work);
 }
 
 static int mall_replace_hw_filter(struct tcf_proto *tp,
@@ -95,7 +115,10 @@ static void mall_destroy(struct tcf_proto *tp)
 	if (tc_should_offload(dev, head->flags))
 		mall_destroy_hw_filter(tp, head, (unsigned long) head);
 
-	call_rcu(&head->rcu, mall_destroy_rcu);
+	if (tcf_exts_get_net(&head->exts))
+		call_rcu(&head->rcu, mall_destroy_rcu);
+	else
+		__mall_destroy(head);
 }
 
 static void *mall_get(struct tcf_proto *tp, u32 handle)
@@ -251,6 +274,14 @@ nla_put_failure:
 	return -1;
 }
 
+static void mall_bind_class(void *fh, u32 classid, unsigned long cl)
+{
+	struct cls_mall_head *head = fh;
+
+	if (head && head->res.classid == classid)
+		head->res.class = cl;
+}
+
 static struct tcf_proto_ops cls_mall_ops __read_mostly = {
 	.kind		= "matchall",
 	.classify	= mall_classify,
@@ -261,6 +292,7 @@ static struct tcf_proto_ops cls_mall_ops __read_mostly = {
 	.delete		= mall_delete,
 	.walk		= mall_walk,
 	.dump		= mall_dump,
+	.bind_class	= mall_bind_class,
 	.owner		= THIS_MODULE,
 };
 

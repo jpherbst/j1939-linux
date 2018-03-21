@@ -32,13 +32,13 @@
 #define BCM_SYSPORT_IO_MACRO(name, offset) \
 static inline u32 name##_readl(struct bcm_sysport_priv *priv, u32 off)	\
 {									\
-	u32 reg = __raw_readl(priv->base + offset + off);		\
+	u32 reg = readl_relaxed(priv->base + offset + off);		\
 	return reg;							\
 }									\
 static inline void name##_writel(struct bcm_sysport_priv *priv,		\
 				  u32 val, u32 off)			\
 {									\
-	__raw_writel(val, priv->base + offset + off);			\
+	writel_relaxed(val, priv->base + offset + off);			\
 }									\
 
 BCM_SYSPORT_IO_MACRO(intrl2_0, SYS_PORT_INTRL2_0_OFFSET);
@@ -59,14 +59,14 @@ static inline u32 rdma_readl(struct bcm_sysport_priv *priv, u32 off)
 {
 	if (priv->is_lite && off >= RDMA_STATUS)
 		off += 4;
-	return __raw_readl(priv->base + SYS_PORT_RDMA_OFFSET + off);
+	return readl_relaxed(priv->base + SYS_PORT_RDMA_OFFSET + off);
 }
 
 static inline void rdma_writel(struct bcm_sysport_priv *priv, u32 val, u32 off)
 {
 	if (priv->is_lite && off >= RDMA_STATUS)
 		off += 4;
-	__raw_writel(val, priv->base + SYS_PORT_RDMA_OFFSET + off);
+	writel_relaxed(val, priv->base + SYS_PORT_RDMA_OFFSET + off);
 }
 
 static inline u32 tdma_control_bit(struct bcm_sysport_priv *priv, u32 bit)
@@ -110,10 +110,10 @@ static inline void dma_desc_set_addr(struct bcm_sysport_priv *priv,
 				     dma_addr_t addr)
 {
 #ifdef CONFIG_PHYS_ADDR_T_64BIT
-	__raw_writel(upper_32_bits(addr) & DESC_ADDR_HI_MASK,
+	writel_relaxed(upper_32_bits(addr) & DESC_ADDR_HI_MASK,
 		     d + DESC_ADDR_HI_STATUS_LEN);
 #endif
-	__raw_writel(lower_32_bits(addr), d + DESC_ADDR_LO);
+	writel_relaxed(lower_32_bits(addr), d + DESC_ADDR_LO);
 }
 
 static inline void tdma_port_write_desc_addr(struct bcm_sysport_priv *priv,
@@ -432,6 +432,27 @@ static void bcm_sysport_update_mib_counters(struct bcm_sysport_priv *priv)
 	netif_dbg(priv, hw, priv->netdev, "updated MIB counters\n");
 }
 
+static void bcm_sysport_update_tx_stats(struct bcm_sysport_priv *priv,
+					u64 *tx_bytes, u64 *tx_packets)
+{
+	struct bcm_sysport_tx_ring *ring;
+	u64 bytes = 0, packets = 0;
+	unsigned int start;
+	unsigned int q;
+
+	for (q = 0; q < priv->netdev->num_tx_queues; q++) {
+		ring = &priv->tx_rings[q];
+		do {
+			start = u64_stats_fetch_begin_irq(&priv->syncp);
+			bytes = ring->bytes;
+			packets = ring->packets;
+		} while (u64_stats_fetch_retry_irq(&priv->syncp, start));
+
+		*tx_bytes += bytes;
+		*tx_packets += packets;
+	}
+}
+
 static void bcm_sysport_get_stats(struct net_device *dev,
 				  struct ethtool_stats *stats, u64 *data)
 {
@@ -439,11 +460,16 @@ static void bcm_sysport_get_stats(struct net_device *dev,
 	struct bcm_sysport_stats64 *stats64 = &priv->stats64;
 	struct u64_stats_sync *syncp = &priv->syncp;
 	struct bcm_sysport_tx_ring *ring;
+	u64 tx_bytes = 0, tx_packets = 0;
 	unsigned int start;
 	int i, j;
 
-	if (netif_running(dev))
+	if (netif_running(dev)) {
 		bcm_sysport_update_mib_counters(priv);
+		bcm_sysport_update_tx_stats(priv, &tx_bytes, &tx_packets);
+		stats64->tx_bytes = tx_bytes;
+		stats64->tx_packets = tx_packets;
+	}
 
 	for (i =  0, j = 0; i < BCM_SYSPORT_STATS_LEN; i++) {
 		const struct bcm_sysport_stats *s;
@@ -461,12 +487,13 @@ static void bcm_sysport_get_stats(struct net_device *dev,
 			continue;
 		p += s->stat_offset;
 
-		if (s->stat_sizeof == sizeof(u64))
+		if (s->stat_sizeof == sizeof(u64) &&
+		    s->type == BCM_SYSPORT_STAT_NETDEV64) {
 			do {
 				start = u64_stats_fetch_begin_irq(syncp);
 				data[i] = *(u64 *)p;
 			} while (u64_stats_fetch_retry_irq(syncp, start));
-		else
+		} else
 			data[i] = *(u32 *)p;
 		j++;
 	}
@@ -610,7 +637,7 @@ static int bcm_sysport_set_coalesce(struct net_device *dev,
 
 static void bcm_sysport_free_cb(struct bcm_sysport_cb *cb)
 {
-	dev_kfree_skb_any(cb->skb);
+	dev_consume_skb_any(cb->skb);
 	cb->skb = NULL;
 	dma_unmap_addr_set(cb, dma_addr, 0);
 }
@@ -1367,6 +1394,8 @@ static int bcm_sysport_init_tx_ring(struct bcm_sysport_priv *priv,
 
 	ring->cbs = kcalloc(size, sizeof(struct bcm_sysport_cb), GFP_KERNEL);
 	if (!ring->cbs) {
+		dma_free_coherent(kdev, sizeof(struct dma_desc),
+				  ring->desc_cpu, ring->desc_dma);
 		netif_err(priv, hw, priv->netdev, "CB allocation failed\n");
 		return -ENOMEM;
 	}
@@ -1389,6 +1418,19 @@ static int bcm_sysport_init_tx_ring(struct bcm_sysport_priv *priv,
 	tdma_writel(priv, 0, TDMA_DESC_RING_PROD_CONS_INDEX(index));
 	tdma_writel(priv, RING_IGNORE_STATUS, TDMA_DESC_RING_MAPPING(index));
 	tdma_writel(priv, 0, TDMA_DESC_RING_PCP_DEI_VID(index));
+
+	/* Do not use tdma_control_bit() here because TSB_SWAP1 collides
+	 * with the original definition of ACB_ALGO
+	 */
+	reg = tdma_readl(priv, TDMA_CONTROL);
+	if (priv->is_lite)
+		reg &= ~BIT(TSB_SWAP1);
+	/* Set a correct TSB format based on host endian */
+	if (!IS_ENABLED(CONFIG_CPU_BIG_ENDIAN))
+		reg |= tdma_control_bit(priv, TSB_SWAP0);
+	else
+		reg &= ~tdma_control_bit(priv, TSB_SWAP0);
+	tdma_writel(priv, reg, TDMA_CONTROL);
 
 	/* Program the number of descriptors as MAX_THRESHOLD and half of
 	 * its size for the hysteresis trigger
@@ -1701,30 +1743,12 @@ static void bcm_sysport_get_stats64(struct net_device *dev,
 {
 	struct bcm_sysport_priv *priv = netdev_priv(dev);
 	struct bcm_sysport_stats64 *stats64 = &priv->stats64;
-	struct bcm_sysport_tx_ring *ring;
-	u64 tx_packets = 0, tx_bytes = 0;
 	unsigned int start;
-	unsigned int q;
 
 	netdev_stats_to_stats64(stats, &dev->stats);
 
-	for (q = 0; q < dev->num_tx_queues; q++) {
-		ring = &priv->tx_rings[q];
-		do {
-			start = u64_stats_fetch_begin_irq(&priv->syncp);
-			tx_bytes = ring->bytes;
-			tx_packets = ring->packets;
-		} while (u64_stats_fetch_retry_irq(&priv->syncp, start));
-
-		stats->tx_bytes += tx_bytes;
-		stats->tx_packets += tx_packets;
-	}
-
-	/* lockless update tx_bytes and tx_packets */
-	u64_stats_update_begin(&priv->syncp);
-	stats64->tx_bytes = stats->tx_bytes;
-	stats64->tx_packets = stats->tx_packets;
-	u64_stats_update_end(&priv->syncp);
+	bcm_sysport_update_tx_stats(priv, &stats->tx_bytes,
+				    &stats->tx_packets);
 
 	do {
 		start = u64_stats_fetch_begin_irq(&priv->syncp);
@@ -1762,10 +1786,14 @@ static void rbuf_init(struct bcm_sysport_priv *priv)
 	reg = rbuf_readl(priv, RBUF_CONTROL);
 	reg |= RBUF_4B_ALGN | RBUF_RSB_EN;
 	/* Set a correct RSB format on SYSTEMPORT Lite */
-	if (priv->is_lite) {
+	if (priv->is_lite)
 		reg &= ~RBUF_RSB_SWAP1;
+
+	/* Set a correct RSB format based on host endian */
+	if (!IS_ENABLED(CONFIG_CPU_BIG_ENDIAN))
 		reg |= RBUF_RSB_SWAP0;
-	}
+	else
+		reg &= ~RBUF_RSB_SWAP0;
 	rbuf_writel(priv, reg, RBUF_CONTROL);
 }
 
@@ -1781,15 +1809,17 @@ static inline void bcm_sysport_mask_all_intrs(struct bcm_sysport_priv *priv)
 
 static inline void gib_set_pad_extension(struct bcm_sysport_priv *priv)
 {
-	u32 __maybe_unused reg;
+	u32 reg;
 
-	/* Include Broadcom tag in pad extension */
+	reg = gib_readl(priv, GIB_CONTROL);
+	/* Include Broadcom tag in pad extension and fix up IPG_LENGTH */
 	if (netdev_uses_dsa(priv->netdev)) {
-		reg = gib_readl(priv, GIB_CONTROL);
 		reg &= ~(GIB_PAD_EXTENSION_MASK << GIB_PAD_EXTENSION_SHIFT);
 		reg |= ENET_BRCM_TAG_LEN << GIB_PAD_EXTENSION_SHIFT;
-		gib_writel(priv, reg, GIB_CONTROL);
 	}
+	reg &= ~(GIB_IPG_LEN_MASK << GIB_IPG_LEN_SHIFT);
+	reg |= 12 << GIB_IPG_LEN_SHIFT;
+	gib_writel(priv, reg, GIB_CONTROL);
 }
 
 static int bcm_sysport_open(struct net_device *dev)
